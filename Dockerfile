@@ -34,7 +34,7 @@ RUN apt-get install -y --no-install-recommends \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     rm -f /usr/bin/python3 && \
-    ln -s /usr/bin/python3.11 /usr/bin/python3
+    ln -s /usr/bin/python3.10 /usr/bin/python3
 
 # 安装python依赖
 RUN pip3 install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
