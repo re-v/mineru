@@ -132,5 +132,5 @@ def pdf_parse_main(
 
 # 测试
 if __name__ == '__main__':
-    pdf_path = r"C:\Users\XYTK2\Desktop\2024-2016-gb-cd-300.pdf"
+    pdf_path = r"/Users/wuguanlin/wgl/MinerU/demo/first_page.pdf"
     pdf_parse_main(pdf_path)

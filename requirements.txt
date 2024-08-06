@@ -9,3 +9,20 @@ wordninja>=2.0.0
 scikit-learn>=1.0.2
 pdfminer.six==20231228
 # The requirements.txt must ensure that only necessary external dependencies are introduced. If there are new dependencies to add, please contact the project administrator.
+pytest
+Levenshtein
+nltk
+rapidfuzz
+statistics
+openxlab #安装opendatalab
+pandas
+numpy
+matplotlib
+seaborn
+scipy
+scikit-learn
+tqdm
+htmltabletomd
+pypandoc
+pyopenssl==24.0.0
+struct-eqtable==0.1.0

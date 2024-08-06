@@ -1,0 +1,145 @@
+[
+    {
+        "type": "text",
+        "text": "计算智能讲义——MaxSAT 问题 计算机科学与技术学院  M201973122  李研 ",
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "1 Definition  ",
+        "text_level": 1,
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "首先给出以下符号定义：",
+        "page_idx": 0
+    },
+    {
+        "type": "table",
+        "page_idx": 0,
+        "img_path": "images/0ab288fef309bd98525a1c332f66173f1baffc7283caec730c2598abe64516cc.jpg"
+    },
+    {
+        "type": "text",
+        "text": "Maximum Satisfiability：找到一组 $x_{i}$  的取值，使得满足的子句数目 $\\left|{C_{i}}\\right|$  最大。",
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "2 Algorithms  ",
+        "text_level": 1,
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "给出以下符号定义：",
+        "page_idx": 0
+    },
+    {
+        "type": "table",
+        "page_idx": 0,
+        "img_path": "images/96ac3a444dfc908d5405882d020e36ca4a14ee869801d9f2249701068b3c845b.jpg"
+    },
+    {
+        "type": "text",
+        "text": "2.1 Randomized Algorithm  ",
+        "text_level": 1,
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": " $\\bullet$ 算法描述：",
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "将 $x_{i}$  分别以 $\\frac{1}{2}$  的概率设置为0 或1，则 $C_{i}$  被满足的期望为 $E\\!\\left[Z_{i}\\right]\\!=\\!1\\!-\\!2^{-\\!|C_{i}|}$ ，CNF  被满足的期望为  $E\\left[Z\\right]=\\sum_{i=1}^{m}E\\left[Z_{i}\\right]=\\sum_{i=1}^{m}\\left(1\\!-\\!2^{-|C_{i}|}\\right).$  。   ",
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": " 近似比分析：",
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "设  $m i n\\left|C_{i}\\right|=K$  ，则有  \n\n ",
+        "page_idx": 1
+    },
+    {
+        "type": "equation",
+        "text": "\n$$\nm\\left(1-2^{-K}\\right)\\leq\\mathrm{E}[Z]\\leq O P T\\leq m\n$$\n ",
+        "text_format": "latex",
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": " 算法分析：",
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": " 简单粗暴，易于理解；  结果不可控，近似比只是给出理论上期望的上界，而未必每次都能得到相应质量的解。 ",
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "2.2 Derandomized Algorithm  ",
+        "text_level": 1,
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": " $\\bullet$  算法描述：",
+        "text_level": 1,
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "在算法 $\\textcircled{1}$ 的基础上，每个变元 $x_{i}$  都有 $\\frac{1}{2}$  的概率取0 或1，即有 $E\\!\\left[Z\\right]\\!=\\!\\frac{1}{2}E\\!\\left[Z\\mid\\!x_{i}=1\\right]\\!+\\!\\frac{1}{2}E\\!\\left[Z\\mid\\!x_{i}=0\\right]$  。对于每个变元  $x_{i}$   ，比较  $\\frac{1}{2}E\\bigl[Z\\mid x_{i}=1\\bigr]$  和 ${\\frac{1}{2}}E\\bigl[Z\\,\\vert\\,x_{i}=0\\bigr]$ 的大小，选择二者中期望值较大者对应的 $x_{i}$  取值。在此基础上，进行下一步迭代。 \n\n",
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": " $\\bullet$  近似比分析：",
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "因为每一步迭代都选择了期望值较大的，所以总的条件期望 $E\\big[Z\\,|\\,x\\big]$  要大于随机算法的期望值 $E[Z]$  ： \n\n",
+        "page_idx": 1
+    },
+    {
+        "type": "equation",
+        "text": "\n$$\n\\operatorname{E}[Z\\,|\\,x]\\ge\\operatorname{E}[Z]\\ge m\\left(1-2^{-K}\\right)\n$$\n ",
+        "text_format": "latex",
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": " 算法分析：",
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": " 结果可控，在变元顺序确定的情况下能保证结果一致性；  结果与变元顺序有关，没有回溯，变元的值一旦确定便不能再更改；  算法复杂度较高，条件期望的计算比较耗时；  可能的优化方向：使用branchandbound的树搜索框架，通过维护一个全局的条件期望实现剪枝和加速搜索。 ",
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "2.3 LP Rounding Algorithm  ",
+        "text_level": 1,
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "给出以下两个决策变量的定义：",
+        "page_idx": 1
+    },
+    {
+        "type": "table",
+        "page_idx": 1,
+        "img_path": "images/15164e62488dc9b423f5b1aebb8f2dd61a1f8b7c8c642f17c5ae4415c8f95dc0.jpg"
+    }
+]
