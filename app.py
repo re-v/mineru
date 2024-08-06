@@ -1,16 +1,19 @@
 import json
+import os
 from typing import List, Optional
 
 import aiohttp
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from pydantic import BaseModel
 
+from magic_pdf_parse_main import pdf_parse_main
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 
 app = FastAPI()
 
 MODEL_PATH = "/app/model/glm-4v-9b-4-bits"
 CALLBACK_URL = "http://192.168.110.125:7861/api/v2/analysis_callback"
+BASEDIR = os.path.abspath(os.path.dirname(__file__))  # 项目目录
 
 
 # CALLBACK_URL = "http://langchain.wsb360.com:7861/api/v2/analysis_callback"
@@ -18,8 +21,8 @@ CALLBACK_URL = "http://192.168.110.125:7861/api/v2/analysis_callback"
 
 class FileInfo(BaseModel):
     file_id: str
-    content_path: str
-    target_path: str
+    content_path: str  # 原路径
+    target_path: str  # 目标路径*文件名
     content: str
 
 
@@ -80,13 +83,56 @@ async def analysis(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+async def write_pdf_stream_to_file(file_list: FileList, pdf_content: bytes):
+    file_dir = os.path.join(BASEDIR, "data")
+    if not os.path.exists(file_dir):
+        os.makedirs(file_dir)
+    file_name = os.path.basename(file_list.file_list[0].target_path)
+    pdf_path = os.path.join(file_dir, file_name)
+    with open(pdf_path, "wb") as f:
+        f.write(pdf_content)
+    return pdf_path
+
+
+async def post_pdf_parse_main(file_info, pdf_path):
+    """
+    获取文件解析内容,写入content返回
+    - 遍历images目录 如果存在图片则压缩文件 调用多模态处理
+        - 如果不存在图片,则回调langchain
+    Args:
+        file_info: 文件信息
+        pdf_path: 源文件路径
+
+    Returns:
+
+    """
+    result = ""
+    try:
+        pdf_name = os.path.basename(pdf_path).split(".")[0]
+        pdf_path_parent = os.path.dirname(pdf_path)
+
+        output_path = os.path.join(pdf_path_parent, pdf_name)
+
+        output_image_path = os.path.join(output_path, 'images')
+
+        # 获取图片的父路径，为的是以相对路径保存到 .md 和 conent_list.json 文件中
+        image_path_parent = os.path.basename(output_image_path)
+        md_path = os.path.join(output_path, f"{pdf_name}.md")
+        with open(md_path, "r", encoding="utf-8") as f:
+            result = f.read()
+    except Exception as e:
+        print(f"Error in post_pdf_parse_main: {str(e)}")
+    file_info.content = result
+    return file_info
+
 async def process_files_background(file_list: FileList, pdf_content: bytes):
     try:
         processed_files = []
-        # for file_info in file_list.file_list:
-        #     processed_file = pdf_parse_main(pdf_path)
-        # processed_file = await process_pdf(file_info, pdf_content)
-        # processed_files.append(processed_file)
+        for file_info in file_list.file_list:
+            pdf_path = await write_pdf_stream_to_file(file_list, pdf_content)
+            # pdf_parse_main(pdf_path) # 同步阻塞
+            processed_file = await post_pdf_parse_main(file_info, pdf_path)
+            processed_files.append(processed_file)
 
         callback_data = {
             "code": 200,
