@@ -89,10 +89,10 @@ async def analysis(
 async def process_files_background(file_list: FileList, pdf_content: bytes):
     try:
         processed_files = []
-        for file_info in file_list.file_list:
-            processed_file = pdf_parse_main(pdf_path)
+        # for file_info in file_list.file_list:
+        #     processed_file = pdf_parse_main(pdf_path)
             # processed_file = await process_pdf(file_info, pdf_content)
-            processed_files.append(processed_file)
+            # processed_files.append(processed_file)
 
         callback_data = {
             "code": 200,
