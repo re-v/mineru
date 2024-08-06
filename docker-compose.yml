@@ -3,7 +3,6 @@ version: "3.6"
 services:
   mineru:
     image: mineru:v0.0.1
-      #restart: always
     container_name: mineru
     networks:
       flyshare:
@@ -21,12 +20,11 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
       - DOCKER=True
-#    command: "python3 app.py"
     ports:
       - 8001:8000
     volumes:
-      - /data/model:/app/model
-      - /data/mineru/graphyRag:/work/mineru
+      - /data/MinerU/model/PDF-Extract-Kit/models:/tmp/models
+      - /data/MinerU/mineru:/work/MinerU
 networks:
   flyshare:
     name: flyshare
