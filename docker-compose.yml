@@ -1,0 +1,37 @@
+version: "3.6"
+
+services:
+  mineru:
+    image: mineru:v0.0.1
+      #restart: always
+    container_name: mineru
+    networks:
+      flyshare:
+        ipv4_address: 192.19.0.22
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - TZ=Asia/Shanghai
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+      - DOCKER=True
+#    command: "python3 app.py"
+    ports:
+      - 8001:8000
+    volumes:
+      - /data/model:/app/model
+      - /data/mineru/graphyRag:/work/mineru
+networks:
+  flyshare:
+    name: flyshare
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.19.0.0/24

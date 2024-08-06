@@ -18,8 +18,8 @@ from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 app = FastAPI()
 
 MODEL_PATH = "/app/model/glm-4v-9b-4-bits"
-# CALLBACK_URL = "http://192.168.110.125:7861/api/v2/analysis_callback"
-CALLBACK_URL = "http://langchain.wsb360.com:7861/api/v2/analysis_callback"
+CALLBACK_URL = "http://192.168.110.125:7861/api/v2/analysis_callback"
+# CALLBACK_URL = "http://langchain.wsb360.com:7861/api/v2/analysis_callback"
 
 
 class FileInfo(BaseModel):
@@ -89,9 +89,10 @@ async def analysis(
 async def process_files_background(file_list: FileList, pdf_content: bytes):
     try:
         processed_files = []
-        # for file_info in file_list.file_list:
+        for file_info in file_list.file_list:
+            processed_file = pdf_parse_main(pdf_path)
             # processed_file = await process_pdf(file_info, pdf_content)
-            # processed_files.append(processed_file)
+            processed_files.append(processed_file)
 
         callback_data = {
             "code": 200,
@@ -137,4 +138,4 @@ if __name__ == "__main__":
     import uvicorn
 
     model_manager = ModelSingleton()  # 在服务启动时加载模型
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
