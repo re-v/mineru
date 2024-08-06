@@ -15,7 +15,7 @@ ADD requirements.txt .
 # 安装系统依赖
 RUN apt-get update
 RUN apt-get install -y --no-install-recommends \
-    python3.11 \
+    python3.10 \
     python3-pip \
     curl \
     libgl1 \
