@@ -1,26 +1,33 @@
 import json
 import os
+import tarfile
 from typing import List, Optional
-import aiohttp
+
 import aiohttp
 import requests
 import logging
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from pydantic import BaseModel
 
-from magic_pdf_parse_main import PDFParser
+from client.minio_client import MinioClient
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
+from magic_pdf_parse_main import pdf_parse_main
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-pdf_parser = PDFParser()
 app = FastAPI()
 
 MODEL_PATH = "/app/model/glm-4v-9b-4-bits"
-CALLBACK_URL = "http://192.168.110.125:7861/api/v2/analysis_callback"
+
 BASEDIR = os.path.abspath(os.path.dirname(__file__))  # 项目目录
 
-
-# CALLBACK_URL = "http://langchain.wsb360.com:7861/api/v2/analysis_callback"
+MULTI_MODEL_SERVER = {
+    "host_port": "http://pdf.wsb360.com:8000"
+}
+CALLBACK_URL = "http://langchain.wsb360.com:7861/api/v2/analysis_callback"
+try:
+    from local_config import CALLBACK_URL, MULTI_MODEL_SERVER
+except Exception as e:
+    pass
 
 
 class FileInfo(BaseModel):
@@ -95,8 +102,8 @@ async def write_pdf_stream_to_file(file_list: FileList, pdf_content: bytes):
         os.makedirs(file_dir)
     file_name = os.path.basename(file_list.file_list[0].target_path)
     pdf_path = os.path.join(file_dir, file_name)
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, lambda: open(pdf_path, "wb").write(pdf_content))
+    with open(pdf_path, "wb") as f:
+        f.write(pdf_content)
     return pdf_path
 
 
@@ -115,7 +122,6 @@ async def post_pdf_parse_main(file_info, pdf_path):
     result = ""
     exist_images = False
     try:
-        pdf_parser.parse_pdf(pdf_path) #调用全局的 pdf_parser
         pdf_name = os.path.basename(pdf_path).split(".")[0]
         pdf_path_parent = os.path.dirname(pdf_path)
 
@@ -123,7 +129,16 @@ async def post_pdf_parse_main(file_info, pdf_path):
 
         output_image_path = os.path.join(output_path, 'images')
         if os.listdir(output_image_path):
-            exist_images = True
+            # 将output_image_path 所有图片传入minio
+            try:
+                for image in os.listdir(output_image_path):
+                    image_local_path = os.path.join(output_image_path, image)
+                    image_full_path = os.path.join(pdf_name, 'images', image)
+                    MinioClient.get_instance().upload_local_file(image_local_path, image_full_path)
+                    logging.info(f"minio 文件写入成功:{image_full_path}")
+                exist_images = True
+            except Exception as e:
+                logging.error(f"minio 文件写入失败:{str(e)}")
 
         md_path = os.path.join(output_path, f"{pdf_name}.md")
         with open(md_path, "r", encoding="utf-8") as f:
@@ -139,11 +154,12 @@ async def post_pdf_parse_main(file_info, pdf_path):
 async def process_files_background(file_list: FileList, pdf_content: bytes):
     callback_data = dict()
     exist_images = False
+    pdf_path = ""
     try:
         processed_files = []
         for file_info in file_list.file_list:
             pdf_path = await write_pdf_stream_to_file(file_list, pdf_content)
-            # pdf_parse_main(pdf_path)  # 同步阻塞
+            pdf_parse_main(pdf_path)  # 同步阻塞
             processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path)
             processed_files.append(processed_file)
         callback_data = {
@@ -174,23 +190,46 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
                 await send_callback(callback_data)
             # call multi_model
             else:
-                pass
+                await call_multi_model(file_list, pdf_path)
 
 
-async def call_multi_model(file_list: FileList):
+def compress_files(output_path: str, file_name: str) -> str:
+    tar_filepath = os.path.join(output_path, f"{file_name}.tar.gz")
+    with tarfile.open(tar_filepath, 'w:gz') as tar:
+        for root, dirs, files in os.walk(output_path):
+            for file in files:
+                if file.endswith(".md") or root.endswith("images"):
+                    file_path = os.path.join(root, file)
+                    tar.add(file_path, arcname=os.path.relpath(file_path, output_path))
+    return tar_filepath
 
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.post(url, data=body, files=files) as response:
-                if response.status == 200:
-                    result = await response.text()
-                else:
-                    result = ""
-        except Exception as e:
-            import traceback
-            msg = traceback.format_exc()
-            logging.error(msg)
-    return result
+
+async def call_multi_model(file_list: FileList, pdf_path: str):
+    pdf_name = os.path.basename(pdf_path).split(".")[0]
+    pdf_path_parent = os.path.dirname(pdf_path)
+
+    output_path = os.path.join(pdf_path_parent, pdf_name)
+    # 上传到minio
+
+    # 压缩output_path 路径下的md文件,images图片包 stream传输
+    zip_filepath = compress_files(output_path, pdf_name)
+
+    url = MULTI_MODEL_SERVER["host_port"] + "/image2md"
+    payload = {"file_list": [file.dict() for file in file_list.file_list], "token": file_list.token}
+    import json
+    body = {"file_list": json.dumps(payload)}
+
+    try:
+        with open(zip_filepath, 'rb') as file:
+            files = {
+                'file': (pdf_name, file, 'application/pdf'),
+            }
+            response = requests.request("POST", url, data=body, files=files)
+    except Exception as e:
+        import traceback
+        msg = traceback.format_exc()
+        logging.error(msg)
+
 
 async def send_callback(data: dict) -> None:
     async with aiohttp.ClientSession() as session:
@@ -213,4 +252,5 @@ if __name__ == "__main__":
     import uvicorn
 
     model_manager = ModelSingleton()  # 在服务启动时加载模型
+    custom_model = model_manager.get_model(False, False)
     uvicorn.run(app, host="0.0.0.0", port=8000)
