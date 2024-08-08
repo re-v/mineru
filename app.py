@@ -1,7 +1,7 @@
 import json
 import os
 from typing import List, Optional
-
+import aiohttp
 import aiohttp
 import requests
 import logging
@@ -95,8 +95,8 @@ async def write_pdf_stream_to_file(file_list: FileList, pdf_content: bytes):
         os.makedirs(file_dir)
     file_name = os.path.basename(file_list.file_list[0].target_path)
     pdf_path = os.path.join(file_dir, file_name)
-    with open(pdf_path, "wb") as f:
-        f.write(pdf_content)
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, lambda: open(pdf_path, "wb").write(pdf_content))
     return pdf_path
 
 
@@ -178,20 +178,18 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
 
 
 async def call_multi_model(file_list: FileList):
-    # 压缩md文件,images图片包 stream传输
 
-    try:
-        with open(self.file_path, 'rb') as file:
-            files = {
-                'file': (md_file_name, file, 'application/pdf'),
-            }
-            response = requests.request("POST", url, data=body, files=files)
-        if response.status_code == 200:
-            result = ""
-    except Exception as e:
-        import traceback
-        msg = traceback.format_exc()
-        logging.error(msg)
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(url, data=body, files=files) as response:
+                if response.status == 200:
+                    result = await response.text()
+                else:
+                    result = ""
+        except Exception as e:
+            import traceback
+            msg = traceback.format_exc()
+            logging.error(msg)
     return result
 
 async def send_callback(data: dict) -> None:
