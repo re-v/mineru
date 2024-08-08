@@ -8,11 +8,11 @@ import logging
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from pydantic import BaseModel
 
-from magic_pdf_parse_main import pdf_parse_main
+from magic_pdf_parse_main import PDFParser
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
+pdf_parser = PDFParser()
 app = FastAPI()
 
 MODEL_PATH = "/app/model/glm-4v-9b-4-bits"
@@ -115,6 +115,7 @@ async def post_pdf_parse_main(file_info, pdf_path):
     result = ""
     exist_images = False
     try:
+        pdf_parser.parse_pdf(pdf_path) #调用全局的 pdf_parser
         pdf_name = os.path.basename(pdf_path).split(".")[0]
         pdf_path_parent = os.path.dirname(pdf_path)
 
