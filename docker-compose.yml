@@ -2,7 +2,7 @@ version: "3.6"
 
 services:
   mineru:
-    image: mineru:v0.0.3
+    image: mineru:v0.0.4
     container_name: mineru
     networks:
       flyshare:
@@ -21,7 +21,7 @@ services:
       - PYTHONUNBUFFERED=1
       - DOCKER=True
     ports:
-      - 8001:8000
+      - 8018:8000
     volumes:
       - /data/MinerU/model/PDF-Extract-Kit/models:/tmp/models
       - /data/MinerU/mineru:/work/MinerU

@@ -16,12 +16,13 @@ from magic_pdf_parse_main import pdf_parse_main
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 app = FastAPI()
 
-MODEL_PATH = "/app/model/glm-4v-9b-4-bits"
-
 BASEDIR = os.path.abspath(os.path.dirname(__file__))  # 项目目录
 
+# MULTI_MODEL_SERVER = {
+#     "host_port": "http://localhost:8001"
+# }
 MULTI_MODEL_SERVER = {
-    "host_port": "http://pdf.wsb360.com:8000"
+    "host_port": "http://fs-doc-analysis:8000"
 }
 CALLBACK_URL = "http://langchain.wsb360.com:7861/api/v2/analysis_callback"
 try:
@@ -248,9 +249,9 @@ def validate_token(token: str) -> bool:
     return True  # 暂时总是返回True
 
 
+model_manager = ModelSingleton()  # 在服务启动时加载模型
+custom_model = model_manager.get_model(False, False)
+
 if __name__ == "__main__":
     import uvicorn
-
-    model_manager = ModelSingleton()  # 在服务启动时加载模型
-    custom_model = model_manager.get_model(False, False)
     uvicorn.run(app, host="0.0.0.0", port=8000)
