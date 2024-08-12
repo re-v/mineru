@@ -25,7 +25,7 @@ services:
     volumes:
       - /data/MinerU/model/PDF-Extract-Kit/models:/tmp/models
       - /data/MinerU/mineru:/work/MinerU
-      - /data/MinerU/mineru/magic-pdf.template.json:~/magic-pdf.json
+      - /data/MinerU/mineru/magic-pdf.template.json:/root/magic-pdf.json
 networks:
   flyshare:
     name: flyshare
