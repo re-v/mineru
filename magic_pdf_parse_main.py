@@ -74,7 +74,7 @@ def pdf_parse_main(
 
         output_image_path = os.path.join(output_path, 'images')
 
-        # 获取图片的父路径，为的是以相对路径保存到 .md 和 conent_list.json 文件中
+        # 获取图片的父路径，为的是以相对路径保存到 .md 和 content_list.json 文件中
         image_path_parent = os.path.basename(output_image_path)
 
         pdf_bytes = open(pdf_path, "rb").read()  # 读取 pdf 文件的二进制数据

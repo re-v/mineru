@@ -1,3 +1,22 @@
+"""
+高级解析上游任务 解析策略模式穷举["normal","fast","hi_res"]
+    - fast -> MinerU 服务直接回调langchain
+        - 图片带表格处理(image_table)
+            - 方法一: RapidTable RapidOCR 获取非公式、数学符号类表格
+                - 通过json 校验图片类型
+                - 速度快 单张/cpu 1s
+                - 无法处理表格内的公式、数学符号
+            - 方法二: 内置模型 StructEqTable
+                - latex表格格式 速度慢 单张/cpu 100s
+                    - 可尝试 Tensorrt-LLM加速
+                - 可处理表格内的公式、数学符号
+                - 在某些用例下 表格结构 优于多模态表格提取
+    - hi_res -> 调用下游多模态任务
+        - 输入 md + images => tar
+        - 表格类图片
+            - 多模态解析表格内容放置md图片标志之前
+            - 其他类型图片都按照上述方式处理
+"""
 import json
 import os
 import tarfile
@@ -58,6 +77,7 @@ async def analysis(
 ):
     """
     MinerU上游任务
+
     1, 获取待解析文件,解析得到md和images图片包
         - 存在图片,上传图片到minio
         - 不存在图片,直接返回md - 停止链路 - 异步回调langchain服务
@@ -111,6 +131,7 @@ async def write_pdf_stream_to_file(file_list: FileList, pdf_content: bytes):
 async def post_pdf_parse_main(file_info, pdf_path):
     """
     获取文件解析内容,写入content返回
+
     - 遍历images目录 如果存在图片则压缩文件 调用多模态处理
         - 如果不存在图片,则回调langchain
     Args:
@@ -129,7 +150,9 @@ async def post_pdf_parse_main(file_info, pdf_path):
         output_path = os.path.join(pdf_path_parent, pdf_name)
 
         output_image_path = os.path.join(output_path, 'images')
-        if os.listdir(output_image_path):
+        if not os.path.exists(output_image_path):
+            print(f"images不包含图片")
+        else:
             # 将output_image_path 所有图片传入minio
             try:
                 for image in os.listdir(output_image_path):
