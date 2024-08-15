@@ -233,7 +233,34 @@ async def call_multi_model(file_list: FileList, pdf_path: str):
     pdf_path_parent = os.path.dirname(pdf_path)
 
     output_path = os.path.join(pdf_path_parent, pdf_name)
-    # 上传到minio
+
+    # 压缩output_path 路径下的md文件,images图片包 stream传输
+    zip_filepath = compress_files(output_path, pdf_name)
+
+    url = MULTI_MODEL_SERVER["host_port"] + "/image2md"
+    payload = {"file_list": [file.dict() for file in file_list.file_list], "token": file_list.token}
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            with open(zip_filepath, 'rb') as file:
+                form_data = aiohttp.FormData()
+                form_data.add_field('file', file, filename=pdf_name, content_type='application/pdf')
+                form_data.add_field('file_list', json.dumps(payload))
+
+                async with session.post(url, data=form_data) as response:
+                    if response.status == 200:
+                        logging.info("请求成功")
+                    else:
+                        logging.error(f"请求失败，状态码: {response.status}")
+    except Exception as e:
+        logging.error(f"请求过程中出错: {str(e)}")
+
+
+async def sync_call_multi_model(file_list: FileList, pdf_path: str):
+    pdf_name = os.path.basename(pdf_path).split(".")[0]
+    pdf_path_parent = os.path.dirname(pdf_path)
+
+    output_path = os.path.join(pdf_path_parent, pdf_name)
 
     # 压缩output_path 路径下的md文件,images图片包 stream传输
     zip_filepath = compress_files(output_path, pdf_name)
@@ -277,4 +304,5 @@ custom_model = model_manager.get_model(True, False)
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
