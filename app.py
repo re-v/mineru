@@ -273,7 +273,7 @@ def validate_token(token: str) -> bool:
 
 
 model_manager = ModelSingleton()  # 在服务启动时加载模型
-custom_model = model_manager.get_model(False, False)
+custom_model = model_manager.get_model(True, False)
 
 if __name__ == "__main__":
     import uvicorn
