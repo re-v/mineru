@@ -1,3 +1,8 @@
+rapidocr_onnxruntime
+rapid_table
+concurrent-log-handler
+requests>=2.32.2
+tqdm>=4.66.3
 boto3>=1.28.43
 Brotli>=1.1.0
 click>=8.1.7
@@ -21,7 +26,6 @@ matplotlib
 seaborn
 scipy
 scikit-learn
-tqdm
 htmltabletomd
 pypandoc
 pyopenssl==24.0.0
@@ -31,6 +35,3 @@ fastapi
 python-multipart
 aiohttp
 minio~=7.2.5
-rapidocr_onnxruntime
-rapid_table
-concurrent-log-handler
