@@ -1,18 +1,17 @@
-from fastapi import UploadFile
+import asyncio
+import os
+
+import aiohttp
+from fastapi import UploadFile, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import pydantic
 from typing import Any
 from minio import Minio
 
-MINIO_CONFIG = {
-    "endpoint": '39.99.153.50:9000',
-    "access_key": 'admin',
-    "secret_key": 'AZsx1234Vchat',
-    "secure": False,
-    "bucket": 'aichat',
-    "bucket_prefix": 'MinerU'
-}
+from configs.config import MINIO_CONFIG, FILE_SERVER
+from logger import code_log
+
 
 class BaseResponse(BaseModel):
     code: int = pydantic.Field(200, description="API status code")
@@ -60,6 +59,79 @@ class MinioClient:
     def upload_file(self, file: UploadFile, object_name: str):
         return self.client.put_object(MINIO_CONFIG['bucket'], __get_real_object_name__(object_name), file.file,
                                       file.size)
+
+    async def upload_local_file_with_java(self, file_id: None, file_path: str, upload_type: str,
+                                          current_token: str = Depends()):
+        # 调用java服务上传文件
+        asyncio.create_task(MinioClient.get_instance().upload_file_main(file_id, file_path, upload_type, current_token))
+        # await MinioClient.get_instance().upload_file_main(file_id, file_path, upload_type, current_token)
+
+    async def upload_file_main(self, file_id: str, file_path: str, upload_type: str, current_token):
+        """
+
+        Parameters
+        ----------
+        file_id
+        file_path
+        upload_type
+        current_token
+
+        Returns
+        -------
+
+        """
+        server_url = FILE_SERVER["host_port"]
+        file_name = os.path.basename(file_path)
+        if upload_type == "analysis":
+            url = server_url + "/ai/knowledge/file/saveResolveFile"
+            try:
+                async with aiohttp.ClientSession() as session:
+                    with open(file_path, 'rb') as file:
+                        form_data = aiohttp.FormData()
+                        form_data.add_field('file', file, filename=file_name)
+                        form_data.add_field('fileId', file_id)
+                        headers = {"Authorization": "Bearer " + current_token.credentials}
+                        async with session.post(url, data=form_data, headers=headers) as response:
+                            if response.status == 200:
+                                code_log.info("请求成功")
+                            else:
+                                code_log.error(f"请求失败，状态码: {response.status}")
+            except Exception as e:
+                code_log.error(f"请求过程中出错: {str(e)}")
+        elif upload_type == "slice":
+            url = server_url + "/ai/knowledge/file/saveFileChunk"
+            try:
+                async with aiohttp.ClientSession() as session:
+                    with open(file_path, 'rb') as file:
+                        form_data = aiohttp.FormData()
+                        form_data.add_field('file', file, filename=file_name)
+                        form_data.add_field('fileId', file_id)
+
+                        headers = {"Authorization": "Bearer " + current_token.credentials}
+                        async with session.post(url, data=form_data, headers=headers) as response:
+                            if response.status == 200:
+                                code_log.info("请求成功")
+                            else:
+                                code_log.error(f"请求失败，状态码: {response.status}")
+            except Exception as e:
+                code_log.error(f"请求过程中出错: {str(e)}")
+        else:
+            # images
+            url = server_url + "/ai/knowledge/file/saveResolveImages"
+            try:
+                async with aiohttp.ClientSession() as session:
+                    with open(file_path, 'rb') as file:
+                        form_data = aiohttp.FormData()
+                        form_data.add_field('images', file, filename=file_name)
+
+                        headers = {"Authorization": "Bearer " + current_token.credentials}
+                        async with session.post(url, data=form_data, headers=headers) as response:
+                            if response.status == 200:
+                                code_log.info("请求成功")
+                            else:
+                                code_log.error(f"请求失败，状态码: {response.status}")
+            except Exception as e:
+                code_log.error(f"请求过程中出错: {str(e)}")
 
     def upload_local_file(self, file_path: str, object_name: str, content_type: str = "application/octet-stream"):
         return self.client.fput_object(MINIO_CONFIG['bucket'], __get_real_object_name__(object_name), file_path,

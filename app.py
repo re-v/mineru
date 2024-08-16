@@ -18,36 +18,24 @@
             - 其他类型图片都按照上述方式处理
 """
 import json
+import logging
 import os
 import tarfile
 from typing import List, Optional
 
 import aiohttp
 import requests
-import logging
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form, Depends
 from pydantic import BaseModel
 
 from client.minio_client import MinioClient
+from configs.config import BASEDIR, MULTI_MODEL_SERVER, CALLBACK_URL
+from get_image_md5 import img_replace_into_md5
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 from magic_pdf_parse_main import pdf_parse_main
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 app = FastAPI()
-
-BASEDIR = os.path.abspath(os.path.dirname(__file__))  # 项目目录
-
-# MULTI_MODEL_SERVER = {
-#     "host_port": "http://localhost:8001"
-# }
-MULTI_MODEL_SERVER = {
-    "host_port": "http://fs-doc-analysis:8000"
-}
-CALLBACK_URL = "http://langchain.wsb360.com:7861/api/v2/analysis_callback"
-try:
-    from local_config import CALLBACK_URL, MULTI_MODEL_SERVER
-except Exception as e:
-    pass
 
 
 class FileInfo(BaseModel):
@@ -128,7 +116,7 @@ async def write_pdf_stream_to_file(file_list: FileList, pdf_content: bytes):
     return pdf_path
 
 
-async def post_pdf_parse_main(file_info, pdf_path):
+async def post_pdf_parse_main(file_info, pdf_path, token):
     """
     获取文件解析内容,写入content返回
 
@@ -137,12 +125,15 @@ async def post_pdf_parse_main(file_info, pdf_path):
     Args:
         file_info: 文件信息
         pdf_path: 源文件路径
+        token: token
 
     Returns:
 
     """
     result = ""
     exist_images = False
+    current_token = Depends()
+    current_token.credentials = token
     try:
         pdf_name = os.path.basename(pdf_path).split(".")[0]
         pdf_path_parent = os.path.dirname(pdf_path)
@@ -150,25 +141,36 @@ async def post_pdf_parse_main(file_info, pdf_path):
         output_path = os.path.join(pdf_path_parent, pdf_name)
 
         output_image_path = os.path.join(output_path, 'images')
+
+        md_path = os.path.join(output_path, f"{pdf_name}.md")
+
+        with open(md_path, "r", encoding="utf-8") as f:
+            result = f.read()
         if not os.path.exists(output_image_path):
             print(f"images不包含图片")
         else:
+            # 先验图片存在
+            exist_images = True
+            if exist_images:
+                result = img_replace_into_md5(md_path, output_image_path)
+                with open(md_path, "w", encoding="utf-8") as f:
+                    f.write(result)
             # 将output_image_path 所有图片传入minio
             try:
                 for image in os.listdir(output_image_path):
                     image_local_path = os.path.join(output_image_path, image)
                     image_full_path = os.path.join(pdf_name, 'images', image)
-                    MinioClient.get_instance().upload_local_file(image_local_path, image_full_path)
+                    # MinioClient.get_instance().upload_local_file(image_local_path, image_full_path)
+                    # await MinioClient.get_instance().upload_file_main(file_info.file_id, image_local_path,
+                    #                                                   "images", current_token)
+                    await MinioClient.get_instance().upload_local_file_with_java(file_info.file_id, image_local_path,
+                                                                                 "images", current_token)
+
                     logging.info(f"minio 文件写入成功:{image_full_path}")
-                exist_images = True
+
             except Exception as e:
                 logging.error(f"minio 文件写入失败:{str(e)}")
 
-        md_path = os.path.join(output_path, f"{pdf_name}.md")
-        with open(md_path, "r", encoding="utf-8") as f:
-            result = f.read()
-            print(result)
-        # 如果路径中存在图片 则1,向minio传入文件 2,调用多模态服务
     except Exception as e:
         print(f"Error in post_pdf_parse_main: {str(e)}")
     file_info.content = result
@@ -184,7 +186,7 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
         for file_info in file_list.file_list:
             pdf_path = await write_pdf_stream_to_file(file_list, pdf_content)
             pdf_parse_main(pdf_path)  # 同步阻塞
-            processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path)
+            processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path, file_list.token)
             processed_files.append(processed_file)
         callback_data = {
             "code": 200,
@@ -300,7 +302,7 @@ def validate_token(token: str) -> bool:
 
 
 model_manager = ModelSingleton()  # 在服务启动时加载模型
-custom_model = model_manager.get_model(True, False)
+custom_model = model_manager.get_model(False, False)
 
 if __name__ == "__main__":
     import uvicorn

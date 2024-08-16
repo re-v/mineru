@@ -31,3 +31,6 @@ fastapi
 python-multipart
 aiohttp
 minio~=7.2.5
+rapidocr_onnxruntime
+rapid_table
+concurrent-log-handler==0.9.25
