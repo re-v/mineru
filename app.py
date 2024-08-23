@@ -17,10 +17,13 @@
             - 多模态解析表格内容放置md图片标志之前
             - 其他类型图片都按照上述方式处理
 """
+import asyncio
 import json
 import logging
 import os
 import tarfile
+import time
+from collections import deque
 from typing import List, Optional
 
 import aiohttp
@@ -36,6 +39,9 @@ from magic_pdf_parse_main import pdf_parse_main
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 app = FastAPI()
+
+task_queue = deque()  # 启用任务型异步队列
+lock = asyncio.Lock()  # 启用异步队列锁
 
 
 class FileInfo(BaseModel):
@@ -56,6 +62,51 @@ class ResponseModel(BaseModel):
     msg: str
     data: Optional[dict] = None
 
+
+async def process_queue():
+    while True:
+        async with lock:
+            if task_queue:
+                task = task_queue.popleft()
+                await process_files_background(task['file_list_obj'], task['pdf_content'])
+        await asyncio.sleep(1)  # 控制任务处理频率
+
+
+@app.on_event("startup")
+async def startup_event():
+    # 在应用启动时，启动任务处理队列的协程
+    asyncio.create_task(process_queue())
+
+
+# @app.post("/pre_process_pdf", response_model=ResponseModel)
+# async def analysis(
+#         background_tasks: BackgroundTasks,
+#         file: UploadFile = File(...),
+#         file_list: str = Form(...)
+# ):
+#     file_list_data = eval(file_list)
+#     file_list_data.update({"strategy": file_list_data.get("strategy", "fast")})
+#     file_list_obj = FileList(**file_list_data)
+#
+#     if not validate_token(file_list_obj.token):
+#         raise HTTPException(status_code=401, detail="Invalid token")
+#
+#     initial_response = ResponseModel(
+#         code=200,
+#         msg="success",
+#         data={
+#             "file_list": [{"status": "已接受文件，正在处理中........"}],
+#             "token": file_list_obj.token
+#         }
+#     )
+#
+#     pdf_content = await file.read()
+#     print(f"received: {file_list_obj.file_list[0].target_path}")
+#
+#     # async with lock:
+#     task_queue.append({'file_list_obj': file_list_obj, 'pdf_content': pdf_content})
+#
+#     return initial_response
 
 @app.post("/pre_process_pdf", response_model=ResponseModel)
 async def analysis(
@@ -78,6 +129,8 @@ async def analysis(
     Returns:
 
     """
+    if lock.locked():
+        raise HTTPException(status_code=400, detail="Server is busy, please try again later")
     try:
         file_list_data = eval(file_list)
         file_list_data.update({"strategy": file_list_data.get("strategy", "fast")})
@@ -96,7 +149,10 @@ async def analysis(
         )
 
         pdf_content = await file.read()
-        background_tasks.add_task(process_files_background, file_list_obj, pdf_content)
+        print(f"received: {file_list_obj.file_list[0].target_path}")
+        # background_tasks.add_task(process_files_background, file_list_obj, pdf_content)
+        # 添加至任务队列
+        task_queue.append({'file_list_obj': file_list_obj, 'pdf_content': pdf_content})
 
         return initial_response
     except json.JSONDecodeError:
@@ -184,8 +240,14 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
     try:
         processed_files = []
         for file_info in file_list.file_list:
+            print(f"process: {file_info.target_path}")
             pdf_path = await write_pdf_stream_to_file(file_list, pdf_content)
-            pdf_parse_main(pdf_path)  # 同步阻塞
+            # pdf_parse_main(pdf_path)  # 同步阻塞
+            # time.sleep(2)
+            # 同步阻塞开销线程执行
+            await asyncio.to_thread(pdf_parse_main, pdf_path)  # 同步阻塞
+            # await asyncio.to_thread(time.sleep, 3)
+            print(f"finish process: {file_info.target_path}")
             processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path, file_list.token)
             processed_files.append(processed_file)
         callback_data = {
