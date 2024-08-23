@@ -55,7 +55,7 @@ class FileList(BaseModel):
     file_list: List[FileInfo]
     token: str
     strategy: str = "fast"  # 可能接收的解析模式
-    oracle_flag: bool = False  # 解析适配oracle_langchain环境回调
+    callback_url: str  # 解析适配oracle_langchain环境回调
 
 
 class ResponseModel(BaseModel):
@@ -130,11 +130,12 @@ async def analysis(
     Returns:
 
     """
-    if lock.locked():
-        raise HTTPException(status_code=400, detail="Server is busy, please try again later")
+    # if lock.locked():
+    #     raise HTTPException(status_code=400, detail="Server is busy, please try again later")
     try:
         file_list_data = json.loads(file_list)
         file_list_data.update({"strategy": file_list_data.get("strategy", "fast")})
+        print(f"params:{file_list_data}")
         file_list_obj = FileList(**file_list_data)
 
         if not validate_token(file_list_obj.token):
@@ -246,7 +247,7 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             # pdf_parse_main(pdf_path)  # 同步阻塞
             # time.sleep(2)
             # 同步阻塞开销线程执行
-            await asyncio.to_thread(pdf_parse_main, pdf_path)  # 同步阻塞
+            await asyncio.to_thread(pdf_parse_main, pdf_path)
             # await asyncio.to_thread(time.sleep, 3)
             print(f"finish process: {file_info.target_path}")
             processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path, file_list.token)
@@ -275,7 +276,7 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             }
         }
     finally:
-        callback_data.update({"oracle_flag": file_list.oracle_flag})
+        callback_data.update({"callback_url": file_list.callback_url})
         if file_list.strategy == "fast":
             # directly_back 如果fast模式 此处不考虑图片描述信息 直接回调langchain
             await send_callback(callback_data)
@@ -310,7 +311,7 @@ async def call_multi_model(file_list: FileList, pdf_path: str):
 
     url = MULTI_MODEL_SERVER["host_port"] + "/image2md"
     payload = {"file_list": [file.dict() for file in file_list.file_list], "token": file_list.token,
-               "oracle_flag": file_list.oracle_flag}
+               "callback_url": file_list.callback_url}
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -355,11 +356,10 @@ async def sync_call_multi_model(file_list: FileList, pdf_path: str):
 
 
 async def send_callback(data: dict) -> None:
-    oracle_flag = data.pop("oracle_flag", False)
-    REAL_CALLBACK_URL = CALLBACK_URL if not oracle_flag else ORACLE_CALLBACK_URL
+    callback_url = data.pop("callback_url")
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(REAL_CALLBACK_URL, json=data) as response:
+            async with session.post(callback_url, json=data) as response:
                 if response.status == 200:
                     print("Callback sent successfully")
                 else:
