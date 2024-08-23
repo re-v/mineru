@@ -32,7 +32,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, F
 from pydantic import BaseModel
 
 from client.minio_client import MinioClient
-from configs.config import BASEDIR, MULTI_MODEL_SERVER, CALLBACK_URL
+from configs.config import BASEDIR, MULTI_MODEL_SERVER, CALLBACK_URL, ORACLE_CALLBACK_URL
 from get_image_md5 import img_replace_into_md5
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 from magic_pdf_parse_main import pdf_parse_main
@@ -55,6 +55,7 @@ class FileList(BaseModel):
     file_list: List[FileInfo]
     token: str
     strategy: str = "fast"  # 可能接收的解析模式
+    oracle_flag: bool = False  # 解析适配oracle_langchain环境回调
 
 
 class ResponseModel(BaseModel):
@@ -260,6 +261,11 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
         }
     except Exception as e:
         print(f"Error in background processing: {str(e)}")
+        error_params = {
+            "file_list": [file.dict() for file in file_list.file_list],
+            "token": file_list.token
+        }
+        print(f"错误回调参数:{error_params}")
         callback_data = {
             "code": 500,
             "msg": f"Error: {str(e)}",
@@ -269,6 +275,7 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             }
         }
     finally:
+        callback_data.update({"oracle_flag": file_list.oracle_flag})
         if file_list.strategy == "fast":
             # directly_back 如果fast模式 此处不考虑图片描述信息 直接回调langchain
             await send_callback(callback_data)
@@ -302,7 +309,8 @@ async def call_multi_model(file_list: FileList, pdf_path: str):
     zip_filepath = compress_files(output_path, pdf_name)
 
     url = MULTI_MODEL_SERVER["host_port"] + "/image2md"
-    payload = {"file_list": [file.dict() for file in file_list.file_list], "token": file_list.token}
+    payload = {"file_list": [file.dict() for file in file_list.file_list], "token": file_list.token,
+               "oracle_flag": file_list.oracle_flag}
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -347,9 +355,11 @@ async def sync_call_multi_model(file_list: FileList, pdf_path: str):
 
 
 async def send_callback(data: dict) -> None:
+    oracle_flag = data.pop("oracle_flag", False)
+    REAL_CALLBACK_URL = CALLBACK_URL if not oracle_flag else ORACLE_CALLBACK_URL
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(CALLBACK_URL, json=data) as response:
+            async with session.post(REAL_CALLBACK_URL, json=data) as response:
                 if response.status == 200:
                     print("Callback sent successfully")
                 else:

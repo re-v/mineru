@@ -11,6 +11,7 @@ MULTI_MODEL_SERVER = {
     "host_port": "http://fs-doc-analysis:8000"
 }
 CALLBACK_URL = "http://langchain.wsb360.com:7861/api/v2/analysis_callback"
+ORACLE_CALLBACK_URL = "http://langchain.wsb360.com:8861/api/v2/analysis_callback"
 FILE_SERVER = {
     "host_port": "http://develop.wsb360.com:18889/ai-api"
 }
