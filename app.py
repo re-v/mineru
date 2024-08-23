@@ -133,7 +133,7 @@ async def analysis(
     if lock.locked():
         raise HTTPException(status_code=400, detail="Server is busy, please try again later")
     try:
-        file_list_data = eval(file_list)
+        file_list_data = json.loads(file_list)
         file_list_data.update({"strategy": file_list_data.get("strategy", "fast")})
         file_list_obj = FileList(**file_list_data)
 
