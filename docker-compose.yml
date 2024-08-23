@@ -21,11 +21,11 @@ services:
       - PYTHONUNBUFFERED=1
       - DOCKER=True
     ports:
-      - 8018:8000
+      - 8002:8000
     volumes:
-      - /data/MinerU/model/PDF-Extract-Kit/models:/tmp/models
-      - /data/MinerU/mineru:/work/MinerU
-      - /data/MinerU/mineru/magic-pdf.template.json:/root/magic-pdf.json
+      - /gpu1_data/models/PDF-Extract-Kit/models:/tmp/models
+      - /home/gpu1/mineru:/work/MinerU
+      - /home/gpu1/mineru/magic-pdf.template.json:/root/magic-pdf.json
 networks:
   flyshare:
     name: flyshare
