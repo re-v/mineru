@@ -2,7 +2,7 @@ version: "3.6"
 
 services:
   mineru:
-    image: mineru:v0.0.6
+    image: mineru:v0.10.5
     container_name: mineru
     networks:
       flyshare:
@@ -24,7 +24,8 @@ services:
     ports:
       - 8002:8000
     volumes:
-      - /gpu1_data/models/PDF-Extract-Kit/models:/tmp/models
+      - /gpu1_data/models/PDF-Extract-Kit-1___0/models:/tmp/models
+      - /gpu1_data/models/layoutreader:/tmp/layoutreader
       - /gpu1_data/paddleocr:/root/.paddleocr
       - /home/gpu1/mineru:/work/MinerU
       - /home/gpu1/mineru/magic-pdf.template.json:/root/magic-pdf.json

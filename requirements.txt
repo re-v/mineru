@@ -3,6 +3,8 @@ rapid_table
 concurrent-log-handler
 requests>=2.32.2
 tqdm>=4.66.3
+doclayout_yolo
+rapidocr_paddle
 unimernet==0.2.1
 boto3>=1.28.43
 Brotli>=1.1.0
