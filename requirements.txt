@@ -1,3 +1,9 @@
+rapidocr_onnxruntime
+rapid_table
+concurrent-log-handler
+requests>=2.32.2
+tqdm>=4.66.3
+unimernet==0.2.1
 boto3>=1.28.43
 Brotli>=1.1.0
 click>=8.1.7
@@ -11,3 +17,24 @@ torch>=2.2.2,<=2.3.1
 transformers
 # pdfminer.six==20231228
 # The requirements.txt must ensure that only necessary external dependencies are introduced. If there are new dependencies to add, please contact the project administrator.
+pytest
+Levenshtein
+nltk
+rapidfuzz
+statistics
+openxlab #安装opendatalab
+pandas
+numpy
+matplotlib
+seaborn
+scipy
+scikit-learn
+htmltabletomd
+pypandoc
+pyopenssl==24.0.0
+struct-eqtable==0.1.0
+uvicorn
+fastapi
+python-multipart
+aiohttp
+minio~=7.2.5

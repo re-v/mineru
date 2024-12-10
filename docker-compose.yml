@@ -1,0 +1,38 @@
+version: "3.6"
+
+services:
+  mineru:
+    image: mineru:v0.0.6
+    container_name: mineru
+    networks:
+      flyshare:
+        ipv4_address: 192.19.0.22
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 2
+              capabilities: [ gpu ]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - TZ=Asia/Shanghai
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+      - DOCKER=True
+      - CUDA_VISIBLE_DEVICES=1
+    ports:
+      - 8002:8000
+    volumes:
+      - /gpu1_data/models/PDF-Extract-Kit/models:/tmp/models
+      - /gpu1_data/paddleocr:/root/.paddleocr
+      - /home/gpu1/mineru:/work/MinerU
+      - /home/gpu1/mineru/magic-pdf.template.json:/root/magic-pdf.json
+networks:
+  flyshare:
+    name: flyshare
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.19.0.0/24
