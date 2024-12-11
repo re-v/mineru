@@ -80,6 +80,7 @@ class MinioClient:
         -------
 
         """
+        # todo 上传文件到java服务 需要从接口获取java服务地址 此处暂定写死
         server_url = FILE_SERVER["host_port"]
         file_name = os.path.basename(file_path)
         if upload_type == "analysis":
