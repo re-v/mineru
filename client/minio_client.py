@@ -60,13 +60,15 @@ class MinioClient:
         return self.client.put_object(MINIO_CONFIG['bucket'], __get_real_object_name__(object_name), file.file,
                                       file.size)
 
-    async def upload_local_file_with_java(self, file_id: None, file_path: str, upload_type: str,
-                                          current_token: str = Depends()):
+    async def upload_local_file_with_java(self, file_id: str, file_path: str, upload_type: str,
+                                          current_token: str = Depends(), file_server: str = FILE_SERVER["develop"]):
         # 调用java服务上传文件
-        asyncio.create_task(MinioClient.get_instance().upload_file_main(file_id, file_path, upload_type, current_token))
+        asyncio.create_task(
+            MinioClient.get_instance().upload_file_main(file_id, file_path, upload_type, current_token, file_server))
         # await MinioClient.get_instance().upload_file_main(file_id, file_path, upload_type, current_token)
 
-    async def upload_file_main(self, file_id: str, file_path: str, upload_type: str, current_token):
+    async def upload_file_main(self, file_id: str, file_path: str, upload_type: str, current_token: str,
+                               file_server: str):
         """
 
         Parameters
@@ -75,13 +77,13 @@ class MinioClient:
         file_path
         upload_type
         current_token
+        file_server
 
         Returns
         -------
 
         """
-        # todo 上传文件到java服务 需要从接口获取java服务地址 此处暂定写死
-        server_url = FILE_SERVER["host_port"]
+        server_url = file_server
         file_name = os.path.basename(file_path)
         if upload_type == "analysis":
             url = server_url + "/ai/knowledge/file/saveResolveFile"

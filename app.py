@@ -32,8 +32,9 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, F
 from pydantic import BaseModel
 
 from client.minio_client import MinioClient
-from configs.config import BASEDIR, MULTI_MODEL_SERVER, CALLBACK_URL, ORACLE_CALLBACK_URL
+from configs.config import BASEDIR, MULTI_MODEL_SERVER, FILE_SERVER
 from get_image_md5 import img_replace_into_md5
+from logger import code_log
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 from magic_pdf_parse_main import pdf_parse_main
 
@@ -174,7 +175,7 @@ async def write_pdf_stream_to_file(file_list: FileList, pdf_content: bytes):
     return pdf_path
 
 
-async def post_pdf_parse_main(file_info, pdf_path, token):
+async def post_pdf_parse_main(file_info, pdf_path, token, file_server):
     """
     获取文件解析内容,写入content返回
 
@@ -184,6 +185,7 @@ async def post_pdf_parse_main(file_info, pdf_path, token):
         file_info: 文件信息
         pdf_path: 源文件路径
         token: token
+        file_server: 文件服务器地址
 
     Returns:
 
@@ -222,7 +224,7 @@ async def post_pdf_parse_main(file_info, pdf_path, token):
                     # await MinioClient.get_instance().upload_file_main(file_info.file_id, image_local_path,
                     #                                                   "images", current_token)
                     await MinioClient.get_instance().upload_local_file_with_java(file_info.file_id, image_local_path,
-                                                                                 "images", current_token)
+                                                                                 "images", current_token, file_server)
 
                     logging.info(f"minio 文件写入成功:{image_full_path}")
 
@@ -235,7 +237,17 @@ async def post_pdf_parse_main(file_info, pdf_path, token):
     return file_info, exist_images
 
 
+def get_real_file_server(callback_url: str) -> str:
+    code_log.info("file_server: %s" % callback_url)
+    if "show" in callback_url:
+        code_log.info(f"FILE_SERVER: {FILE_SERVER} \ncurrent url map: produce -> {FILE_SERVER['produce']}")
+        return FILE_SERVER["produce"]
+    code_log.info(f"FILE_SERVER: {FILE_SERVER} \ncurrent url map: develop -> {FILE_SERVER['develop']}")
+    return FILE_SERVER["develop"]
+
+
 async def process_files_background(file_list: FileList, pdf_content: bytes):
+    file_server = get_real_file_server(file_list.callback_url)
     callback_data = dict()
     exist_images = False
     pdf_path = ""
@@ -250,7 +262,7 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             await asyncio.to_thread(pdf_parse_main, pdf_path)
             # await asyncio.to_thread(time.sleep, 3)
             print(f"finish process: {file_info.target_path}")
-            processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path, file_list.token)
+            processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path, file_list.token, file_server)
             processed_files.append(processed_file)
         callback_data = {
             "code": 200,
