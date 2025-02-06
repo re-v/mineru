@@ -14,7 +14,7 @@ import tarfile
 
 import aiohttp
 
-from configs.config import MULTI_MODEL_SERVER
+from configs.config import MULTI_MODEL_SERVER, BASEDIR
 
 """
 直接执行命令 传入文件夹 例如 python fast_analysis_script --folder input_path --target output_path
@@ -97,6 +97,7 @@ async def call_multi_model_4local(pdf_path: str):
 
 def process_pdf(pdf_path, target):
     """处理单个 PDF 文件"""
+    print(pdf_path)
     extract_text_and_images(pdf_path)
     # pdf 检查解析结果有无图片
     try:
@@ -129,8 +130,9 @@ def process_pdf(pdf_path, target):
         print(f"Error in process_pdf: {str(e)}")
 
 
-def main(folder, target):
+def main(input_path, target):
     """主函数：处理文件夹中的所有 PDF 文件"""
+    folder = os.path.join(BASEDIR, input_path)
     if not os.path.exists(target):
         os.makedirs(target)
 
@@ -152,5 +154,5 @@ if __name__ == '__main__':
 
     # 执行主函数
     main(args.folder, args.target)
-    # doc: python fast_analysis_script.py --folder input_path --target output_path
+    # doc: python3 fast_analysis_script.py --folder input_path --target output_path
     # main("input_path", "output_path")
