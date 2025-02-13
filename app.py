@@ -264,14 +264,17 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             print(f"finish process: {file_info.target_path}")
             processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path, file_list.token, file_server)
             processed_files.append(processed_file)
-        callback_data = {
-            "code": 200,
-            "msg": "success",
-            "data": {
-                "file_list": [file.dict() for file in processed_files],
-                "token": file_list.token
+        if processed_files:
+            callback_data = {
+                "code": 200,
+                "msg": "success",
+                "data": {
+                    "file_list": [file.dict() for file in processed_files],
+                    "token": file_list.token
+                }
             }
-        }
+        else:
+            raise Exception('not data in processed_files')
     except Exception as e:
         print(f"Error in background processing: {str(e)}")
         error_params = {

@@ -92,7 +92,9 @@ def pdf_parse_main(
 
         if model_json_path:
             # 读取已经被模型解析后的pdf文件的 json 原始数据，list 类型
-            model_json = json.loads(open(model_json_path, 'r', encoding='utf-8').read())
+            # 避免文件句柄未关闭
+            with open(model_json_path, 'r', encoding='utf-8') as f:
+                model_json = json.load(f)
             orig_model_list = copy.deepcopy(model_json)
         else:
             model_json = []
@@ -110,7 +112,7 @@ def pdf_parse_main(
             pipe = OCRPipe(pdf_bytes, model_json, image_writer)
         else:
             logger.error('unknown parse method, only auto, ocr, txt allowed')
-            exit(1)
+            raise ValueError('Unknown parse method, only auto, ocr, txt allowed')
 
         # 执行分类
         pipe.pipe_classify()
@@ -126,12 +128,18 @@ def pdf_parse_main(
         # 保存 text 和 md 格式的结果
         content_list = pipe.pipe_mk_uni_format(image_path_parent, drop_mode='none')
         md_content = pipe.pipe_mk_markdown(image_path_parent, drop_mode='none')
+        # md_content = pipe.pipe_mk_markdown(image_path_parent, drop_mode='none', md_make_mode="nlp_markdown")
 
         if is_json_md_dump:
             json_md_dump(pipe, md_writer, pdf_name, content_list, md_content, orig_model_list)
 
-        if is_draw_visualization_bbox:
-            draw_visualization_bbox(pipe.pdf_mid_data['pdf_info'], pdf_bytes, output_path, pdf_name)
+        pdf_info = pipe.pdf_mid_data.get('pdf_info')
+        if pdf_info:
+            draw_visualization_bbox(pdf_info, pdf_bytes, output_path, pdf_name)
+        else:
+            logger.warning("pdf_info is missing, skipping visualization")
+        # if is_draw_visualization_bbox:
+        #     draw_visualization_bbox(pipe.pdf_mid_data['pdf_info'], pdf_bytes, output_path, pdf_name)
 
     except Exception as e:
         logger.exception(e)
@@ -139,5 +147,6 @@ def pdf_parse_main(
 
 # 测试
 if __name__ == '__main__':
-    pdf_path = r"/Users/wuguanlin/wgl/MinerU/demo/first_page.pdf"
+    # pdf_path = r"/Users/wuguanlin/wgl/langchain-chatchat/cut_采矿工程设计手册（上册）.pdf"
+    pdf_path = r"/Users/wuguanlin/cut_采矿工程设计手册（上册）new.pdf"
     pdf_parse_main(pdf_path)
