@@ -37,6 +37,7 @@ from get_image_md5 import img_replace_into_md5
 from logger import code_log
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 from magic_pdf_parse_main import pdf_parse_main
+from model_service import ModelService
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 app = FastAPI()
@@ -76,6 +77,7 @@ async def process_queue():
 
 @app.on_event("startup")
 async def startup_event():
+    await model_service.listen_for_reload()
     # 在应用启动时，启动任务处理队列的协程
     asyncio.create_task(process_queue())
 
@@ -239,7 +241,7 @@ async def post_pdf_parse_main(file_info, pdf_path, token, file_server):
 
 def get_real_file_server(callback_url: str) -> str:
     code_log.info("file_server: %s" % callback_url)
-    if "show" in callback_url:
+    if "show" or "10.204.118.33" in callback_url:
         code_log.info(f"FILE_SERVER: {FILE_SERVER} \ncurrent url map: produce -> {FILE_SERVER['produce']}")
         return FILE_SERVER["produce"]
     code_log.info(f"FILE_SERVER: {FILE_SERVER} \ncurrent url map: develop -> {FILE_SERVER['develop']}")
@@ -259,7 +261,11 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             # pdf_parse_main(pdf_path)  # 同步阻塞
             # time.sleep(2)
             # 同步阻塞开销线程执行
-            await asyncio.to_thread(pdf_parse_main, pdf_path)
+            # is_suc = False
+            is_suc = await asyncio.to_thread(pdf_parse_main, pdf_path)
+            if not is_suc:
+                await model_service.handle_reload()
+                raise Exception("模型解析失败,尝试重启模型,队列回填")
             # await asyncio.to_thread(time.sleep, 3)
             print(f"finish process: {file_info.target_path}")
             processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path, file_list.token, file_server)
@@ -282,6 +288,7 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             "token": file_list.token
         }
         print(f"错误回调参数:{error_params}")
+        task_queue.append({'file_list_obj': file_list, 'pdf_content': pdf_content})
         callback_data = {
             "code": 500,
             "msg": f"Error: {str(e)}",
@@ -388,8 +395,20 @@ def validate_token(token: str) -> bool:
     return True  # 暂时总是返回True
 
 
-model_manager = ModelSingleton()  # 在服务启动时加载模型
-custom_model = model_manager.get_model(False, False)
+# 创建全局模型服务实例
+model_service = ModelService()
+# ✅ 在事件循环中创建监听任务
+# async def start_listening():
+#     await model_service.listen_for_reload()
+
+# 使用 `asyncio.create_task()` 而不是 `asyncio.run()`
+# asyncio.create_task(start_listening())
+# 在服务启动时监听信号
+# asyncio.run(model_service.listen_for_reload())
+
+
+# model_manager = ModelSingleton()  # 在服务启动时加载模型
+# custom_model = model_manager.get_model(False, False)
 
 if __name__ == "__main__":
     import uvicorn

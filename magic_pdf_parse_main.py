@@ -140,9 +140,11 @@ def pdf_parse_main(
             logger.warning("pdf_info is missing, skipping visualization")
         # if is_draw_visualization_bbox:
         #     draw_visualization_bbox(pipe.pdf_mid_data['pdf_info'], pdf_bytes, output_path, pdf_name)
+        return True
 
     except Exception as e:
         logger.exception(e)
+        return False
 
 
 # 测试

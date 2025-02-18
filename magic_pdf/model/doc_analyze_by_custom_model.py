@@ -76,6 +76,12 @@ class ModelSingleton:
                                                   formula_enable=formula_enable, table_enable=table_enable)
         return self._models[key]
 
+    def reload_model(self, ocr: bool, show_log: bool, lang=None, layout_model=None, formula_enable=None, table_enable=None):
+        key = (ocr, show_log, lang, layout_model, formula_enable, table_enable)
+        if key in self._models:
+            del self._models[key]
+        return self.get_model(ocr, show_log, lang, layout_model, formula_enable, table_enable)
+
 
 def custom_model_init(ocr: bool = False, show_log: bool = False, lang=None,
                       layout_model=None, formula_enable=None, table_enable=None):
