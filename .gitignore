@@ -54,3 +54,7 @@ output/
 data/
 local*
 *bak/
+/demo/
+/logs/
+/output_path/
+/input_path/

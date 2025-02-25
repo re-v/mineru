@@ -28,6 +28,7 @@ from typing import List, Optional
 
 import aiohttp
 import requests
+import uvicorn
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form, Depends
 from pydantic import BaseModel
 
@@ -36,14 +37,14 @@ from configs.config import BASEDIR, MULTI_MODEL_SERVER, FILE_SERVER
 from fast_analysis_script import call_multi_model_4local, extract_text_and_images, call_multi_model_2md
 from get_image_md5 import img_replace_into_md5
 from logger import code_log
-from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 from magic_pdf_parse_main import pdf_parse_main
-from model_service import ModelService
+from model_service import monitor_process
+from multiprocessing import Process, Manager, Lock, Event
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 app = FastAPI()
 
-task_queue = deque()  # 启用任务型异步队列
+# task_queue = deque()  # 启用任务型异步队列
 lock = asyncio.Lock()  # 启用异步队列锁
 
 
@@ -67,25 +68,55 @@ class ResponseModel(BaseModel):
     data: Optional[dict] = None
 
 
-async def process_queue():
+def sync_process_queue(stop_event, input_queue):
+    # 模型管理进程调度
+    # 输入任务队列
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        task_queue = input_queue.get()
+        print(task_queue)
+        input_queue.put(task_queue)
+        loop.run_until_complete(process_queue(stop_event, input_queue))
+    except Exception as e:
+        print(f"⚠️ Error in process_queue: {e}")
+        check_and_reload(stop_event, input_queue, False)
+    finally:
+        loop.close()
+
+
+async def process_queue(stop_event, msg_queue):
+    # 由模型进程调度
     while True:
         async with lock:
-            if task_queue:
-                task = task_queue.popleft()
+            if msg_queue:
+                # task = msg_queue.popleft()
+                task = msg_queue.get()
                 if task.get("pdf2md", ""):
-                    await process_pdf2md_background(task['callback_url'], task['pdf_content'],
+                    await process_pdf2md_background(stop_event, msg_queue, task['callback_url'], task['pdf_content'],
                                                     task['filename'],
                                                     task['task_id'])
                 else:
-                    await process_files_background(task['file_list_obj'], task['pdf_content'])
-        await asyncio.sleep(1)  # 控制任务处理频率
+                    await process_files_background(stop_event, msg_queue, task['file_list_obj'], task['pdf_content'])
+        await asyncio.sleep(1)  # 控制任务处理频率  # 控制任务处理频率
 
 
 @app.on_event("startup")
 async def startup_event():
-    await model_service.listen_for_reload()
+    pass
+    # from multiprocessing import Process, Manager, Lock, Event
+    # with Manager() as manager:
+    #     msg_queue = manager.Queue()  # Queue for sending messages to the child process
+    #     lock = Lock()  # Lock for synchronizing processes
+    #     stop_event = Event()  # Event to signal the child process to stop
+    #
+    #     # Start monitor process for managing the model child process
+    #     monitor = Process(target=monitor_process, args=(lock, msg_queue, stop_event))
+    #     monitor.start()
     # 在应用启动时，启动任务处理队列的协程
-    asyncio.create_task(process_queue())
+    # asyncio.create_task(process_queue(stop_event, msg_queue))
+    # asyncio.create_task(process_queue())
+
 
 
 @app.post("/process_pdf2md", response_model=ResponseModel)
@@ -106,7 +137,7 @@ async def process_data2md(
 
         pdf_content = await file.read()
         # 添加至任务队列
-        task_queue.append(
+        input_queue.put(
             {'task_id': task_id, 'callback_url': callback_url, 'filename': file.filename,
              'pdf_content': pdf_content, 'pdf2md': True})
         return initial_response
@@ -160,7 +191,7 @@ async def analysis(
         print(f"received: {file_list_obj.file_list[0].target_path}")
         # background_tasks.add_task(process_files_background, file_list_obj, pdf_content)
         # 添加至任务队列
-        task_queue.append({'file_list_obj': file_list_obj, 'pdf_content': pdf_content})
+        input_queue.put({'file_list_obj': file_list_obj, 'pdf_content': pdf_content})
 
         return initial_response
     except json.JSONDecodeError:
@@ -251,7 +282,18 @@ def get_real_file_server(callback_url: str) -> str:
     return FILE_SERVER["develop"]
 
 
-async def process_files_background(file_list: FileList, pdf_content: bytes):
+def check_and_reload(stop_event, msg_queue, is_suc):
+    if not is_suc:
+        # await model_service.handle_reload()
+        stop_event.set()  # Signal the current child process to stop
+        time.sleep(1)  # Give the child process time to exit
+        stop_event.clear()  # Clear the event for the new process
+        # msg_queue.put("reload")  # Send reload signal to the new child process
+        # model_process.send_signal(signal.SIGUSR1)
+        raise Exception("模型解析失败,尝试重启模型,队列回填")
+
+
+async def process_files_background(stop_event, msg_queue, file_list: FileList, pdf_content: bytes):
     file_server = get_real_file_server(file_list.callback_url)
     callback_data = dict()
     exist_images = False
@@ -261,17 +303,14 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
         for file_info in file_list.file_list:
             print(f"process: {file_info.target_path}")
             pdf_path = await write_pdf_stream_to_file(file_list, pdf_content)
-            # pdf_parse_main(pdf_path)  # 同步阻塞
-            # time.sleep(2)
             # 同步阻塞开销线程执行
+            # time.sleep(2)
             # is_suc = False
             is_suc = await asyncio.to_thread(pdf_parse_main, pdf_path)
             # debug
-            # if file_list.strategy == "test":
-            #     is_suc = False
-            if not is_suc:
-                await model_service.handle_reload()
-                raise Exception("模型解析失败,尝试重启模型,队列回填")
+            if file_list.strategy == "test":
+                is_suc = False
+            check_and_reload(stop_event, msg_queue, is_suc)
             # await asyncio.to_thread(time.sleep, 3)
             print(f"finish process: {file_info.target_path}")
             processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path, file_list.token, file_server)
@@ -294,8 +333,7 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             "token": file_list.token
         }
         print(f"错误回调参数:{error_params}")
-        # todo 移除回填
-        task_queue.append({'file_list_obj': file_list, 'pdf_content': pdf_content})
+        input_queue.put({'file_list_obj': file_list, 'pdf_content': pdf_content})
         callback_data = {
             "code": 500,
             "msg": f"Error: {str(e)}",
@@ -317,7 +355,7 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             else:
                 await call_multi_model(file_list, pdf_path)
 
-async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filename: str,
+async def process_pdf2md_background(stop_event, msg_queue, callback_url: str, pdf_content: bytes, filename: str,
                                     task_id: str):
     msg = ""
     md_path = ""
@@ -325,7 +363,7 @@ async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filen
     callback_body_template = {
         "id": task_id,
         "status": status,
-        "fileType": 2,
+        "fileType": "markdown",
         "procDesc": msg
     }
     # pdf 文件处理
@@ -336,12 +374,10 @@ async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filen
     pdf_path = os.path.join(file_dir, file_name)
     with open(pdf_path, "wb") as f:
         f.write(pdf_content)
+    is_suc = extract_text_and_images(pdf_path)
+    check_and_reload(stop_event, msg_queue, is_suc)
     # pdf 检查解析结果有无图片
     try:
-        is_suc = extract_text_and_images(pdf_path)
-        if not is_suc:
-            await model_service.handle_reload()
-            raise Exception("模型解析失败,尝试重启模型,队列回填")
         pdf_name = os.path.basename(pdf_path).split(".")[0]
         pdf_path_parent = os.path.dirname(pdf_path)
         output_path = os.path.join(pdf_path_parent, pdf_name)
@@ -355,21 +391,14 @@ async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filen
             #     f.write(result)
             print(f"images不包含图片")
             # 直接回调 发送md文件
-            print(f"回调入参:{output_md_path, callback_url, callback_body_template}")
             await sendfile_callback(output_md_path, callback_url, callback_body_template)
         else:
             # 通过多模态回调
-            print(f"call_multi_model_2md 回调入参:{output_md_path, callback_url, callback_body_template}")
-            # await sendfile_callback(output_md_path, callback_url, callback_body_template)
-            await call_multi_model_2md(pdf_path, callback_url, callback_body_template)
+            await call_multi_model_4local(pdf_path, callback_url, callback_body_template)
     except Exception as e:
         print(f"Error in process_pdf: {str(e)}")
-        task_queue.append(
-            {'task_id': task_id, 'callback_url': callback_url, 'filename': file_name,
-             'pdf_content': pdf_content, 'pdf2md': True})
         msg = str(e)
         callback_body_template['procDesc'] = msg
-        print(f"回调入参:{md_path, callback_url, callback_body_template}")
         await sendfile_callback(md_path, callback_url, callback_body_template)
 
 
@@ -488,22 +517,22 @@ def validate_token(token: str) -> bool:
     return True  # 暂时总是返回True
 
 
-# 创建全局模型服务实例
-model_service = ModelService()
-# ✅ 在事件循环中创建监听任务
-# async def start_listening():
-#     await model_service.listen_for_reload()
+def start_process():
+    """Function to start multiprocessing, ensuring proper process initialization"""
+    with Manager() as manager:
+        global input_queue
+        input_queue = manager.Queue()
+        stop_event = Event()
 
-# 使用 `asyncio.create_task()` 而不是 `asyncio.run()`
-# asyncio.create_task(start_listening())
-# 在服务启动时监听信号
-# asyncio.run(model_service.listen_for_reload())
+        # 模型管理进程
+        monitor = Process(target=monitor_process, args=(stop_event, input_queue))
+        monitor.start()
+        # # 任务管理进程
+        # process_main = Process(target=sync_process_queue, args=(stop_event, input_queue))
+        # process_main.start()
 
+        uvicorn.run(app, host="0.0.0.0", port=8000)
 
-# model_manager = ModelSingleton()  # 在服务启动时加载模型
-# custom_model = model_manager.get_model(False, False)
 
 if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    start_process()

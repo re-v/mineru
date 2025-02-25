@@ -7,62 +7,66 @@
 @Author  ：wgl
 @Date    ：2025/2/18 10:14 
 '''
-import asyncio
 import gc
-import signal
+import time
+from multiprocessing import Process
+
 import torch
-from magic_pdf.model.sub_modules.model_init import AtomModelSingleton
 
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 
 
 class ModelService:
-    """管理模型的生命周期，包括初始化和重新加载"""
-
     def __init__(self):
         self.model_manager = None
         self.custom_model = None
-        self.load_model()  # 在服务启动时加载模型
 
     def load_model(self):
-        """加载或重新加载模型"""
-        print("🟢 加载模型...")
-        atom_model_manager = AtomModelSingleton()
-        try:
-            if self.model_manager:
-                # del self.model_manager  # 删除旧模型
-                atom_model_manager._instance = None
-                atom_model_manager._models = {}
-                self.clean_memory()
-                self.model_manager.reload_model(False, False)
-            else:
-                self.model_manager = ModelSingleton()
-                self.custom_model = self.model_manager.get_model(False, False)
-        except Exception:
-            del self.model_manager
-            del self.custom_model
-            atom_model_manager._instance = None
-            atom_model_manager._models = {}
+        """Load or reload the model."""
+        print("🟢 Loading model...")
+        if not self.model_manager:
             self.model_manager = ModelSingleton()
-            self.custom_model = self.model_manager.reload_model(False, False)
-        print("✅ 模型加载完成！")
-
-    async def listen_for_reload(self):
-        """监听信号，收到信号后重新加载模型"""
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGUSR1, signal.SIGTERM):
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(self.handle_reload()))
-
-    async def handle_reload(self):
-        """处理模型重启信号"""
-        print("⚠️  收到重启信号，正在重新加载模型...")
-        self.load_model()
-        print("🔄 模型重新加载成功！")
+            self.custom_model = self.model_manager.get_model(False, False)
+        print("✅ Model loaded successfully!")
 
     def clean_memory(self):
+        """Clean GPU memory and perform garbage collection."""
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
-            torch.cuda.synchronize()
         gc.collect()
 
+    def restart_model(self):
+        """Attempt to reload the model, return success/failure."""
+        try:
+            self.clean_memory()
+            self.load_model()
+        except Exception as e:
+            print(f"⚠️ Model reload failed: {e}")
+            return False
+        return True
+
+
+def model_reload_process(stop_event, input_queue):
+    """Child process responsible for model loading and reloading."""
+    model_service = ModelService()
+    model_service.load_model()   # 初始加载模型
+    try:
+        while not stop_event.is_set():
+            # 处理队列任务
+            if not input_queue.empty():
+                from app import sync_process_queue
+                sync_process_queue(stop_event, input_queue)
+            time.sleep(1)  # Sleep to avoid busy-waiting
+    except Exception as e:
+        pass
+
+
+def monitor_process(stop_event, input_queue):
+    """Monitor process responsible for managing child processes."""
+    while True:
+        p = Process(target=model_reload_process, args=(stop_event, input_queue))
+        p.start()
+        p.join()  # Wait for the child process to exit
+        print("Child process exited, restarting...")
+        time.sleep(2)  # Delay before restarting

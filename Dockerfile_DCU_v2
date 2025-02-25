@@ -1,0 +1,14 @@
+FROM mineru:v0.0.1
+
+WORKDIR /work/MinerU
+
+ADD requirements.txt .
+ADD torchtext torchtext
+
+RUN pip install -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple && pip uninstall torchtext -y
+RUN cd torchtext && git submodule update --init --recursive && python setup.py clean install
+RUN cd /work/MinerU
+
+
+EXPOSE 8000
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

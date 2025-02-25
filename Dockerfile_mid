@@ -1,0 +1,12 @@
+FROM mineru:v0.10.5
+
+WORKDIR /work/MinerU
+
+ADD requirements.txt .
+
+# RUN pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip3 install paddlepaddle-gpu==3.0.0b1 -i https://www.paddlepaddle.org.cn/packages/stable/cu123/
+
+EXPOSE 8000
+# 设置启动命令
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

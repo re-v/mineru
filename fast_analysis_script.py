@@ -52,7 +52,7 @@ def compress_files(output_path: str, file_name: str) -> str:
     return tar_filepath
 
 
-async def call_multi_model_4local(pdf_path: str):
+async def call_multi_model_4local(pdf_path: str, callback_url: str, callback_body_template: dict):
     pdf_name = os.path.basename(pdf_path).split(".")[0]
     pdf_path_parent = os.path.dirname(pdf_path)
 
@@ -68,6 +68,8 @@ async def call_multi_model_4local(pdf_path: str):
             with open(zip_filepath, 'rb') as file:
                 form_data = aiohttp.FormData()
                 form_data.add_field('file', file, filename=pdf_name, content_type='application/pdf')
+                form_data.add_field('callback_url', callback_url)
+                form_data.add_field('callback_body_template', callback_body_template)
 
                 async with session.post(url, data=form_data) as response:
                     if response.status == 200:
