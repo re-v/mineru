@@ -8,7 +8,7 @@ from loguru import logger
 from magic_pdf.config.drop_reason import DropReason
 from magic_pdf.libs.commons import get_top_percent_list, mymax
 from magic_pdf.libs.language import detect_lang
-from magic_pdf.libs.pdf_check import detect_invalid_chars_by_pymupdf
+from magic_pdf.libs.pdf_check import detect_invalid_chars_by_pymupdf, detect_invalid_chars
 
 scan_max_page = 50
 junk_limit_min = 10
@@ -323,7 +323,8 @@ def get_language(doc: fitz.Document):
 
 def check_invalid_chars(pdf_bytes):
     """乱码检测."""
-    return detect_invalid_chars_by_pymupdf(pdf_bytes)
+    # return detect_invalid_chars_by_pymupdf(pdf_bytes)
+    return detect_invalid_chars(pdf_bytes)
 
 
 def pdf_meta_scan(pdf_bytes: bytes):
@@ -355,9 +356,9 @@ def pdf_meta_scan(pdf_bytes: bytes):
         # logger.info(f"image_info_per_page: {image_info_per_page}, junk_img_bojids: {junk_img_bojids}")
         text_len_per_page = get_pdf_textlen_per_page(doc)
         # logger.info(f"text_len_per_page: {text_len_per_page}")
-        text_layout_per_page = get_pdf_text_layout_per_page(doc)
+        # text_layout_per_page = get_pdf_text_layout_per_page(doc)
         # logger.info(f"text_layout_per_page: {text_layout_per_page}")
-        text_language = get_language(doc)
+        # text_language = get_language(doc)
         # logger.info(f"text_language: {text_language}")
         invalid_chars = check_invalid_chars(pdf_bytes)
         # logger.info(f"invalid_chars: {invalid_chars}")
@@ -371,8 +372,8 @@ def pdf_meta_scan(pdf_bytes: bytes):
             'page_height_pts': int(page_height_pts),
             'image_info_per_page': image_info_per_page,
             'text_len_per_page': text_len_per_page,
-            'text_layout_per_page': text_layout_per_page,
-            'text_language': text_language,
+            # 'text_layout_per_page': text_layout_per_page,
+            # 'text_language': text_language,
             # "svgs_per_page": svgs_per_page,
             'imgs_per_page': imgs_per_page,  # 增加每页img数量list
             'junk_img_bojids': junk_img_bojids,  # 增加垃圾图片的bojid list
