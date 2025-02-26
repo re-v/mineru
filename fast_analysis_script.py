@@ -9,6 +9,7 @@
 '''
 import argparse
 import asyncio
+import json
 import logging
 import tarfile
 
@@ -27,9 +28,6 @@ from magic_pdf_parse_main import pdf_parse_main
 import os
 import requests
 
-# 多模态接口的 URL（示例）
-MULTIMODAL_API_URL = "https://example.com/multimodal-api"
-
 
 def is_pdf(file_path):
     """检查文件是否是 PDF 文件"""
@@ -41,21 +39,6 @@ def extract_text_and_images(pdf_path):
     result = pdf_parse_main(pdf_path)
 
     return result
-
-
-def call_multimodal_api(image_data):
-    """调用多模态接口"""
-    try:
-        response = requests.post(
-            MULTIMODAL_API_URL,
-            files={"image": image_data},
-            headers={"Content-Type": "application/octet-stream"}
-        )
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"调用多模态接口失败: {e}")
-        return None
 
 
 def compress_files(output_path: str, file_name: str) -> str:
@@ -85,6 +68,33 @@ async def call_multi_model_4local(pdf_path: str):
             with open(zip_filepath, 'rb') as file:
                 form_data = aiohttp.FormData()
                 form_data.add_field('file', file, filename=pdf_name, content_type='application/pdf')
+
+                async with session.post(url, data=form_data) as response:
+                    if response.status == 200:
+                        logging.info("请求成功")
+                    else:
+                        logging.error(f"请求失败，状态码: {response.status}")
+    except Exception as e:
+        logging.error(f"请求过程中出错: {str(e)}")
+
+async def call_multi_model_2md(pdf_path: str, callback_url: str, callback_body_template: dict):
+    pdf_name = os.path.basename(pdf_path).split(".")[0]
+    pdf_path_parent = os.path.dirname(pdf_path)
+
+    output_path = os.path.join(pdf_path_parent, pdf_name)
+
+    # 压缩output_path 路径下的md文件,images图片包 stream传输
+    zip_filepath = compress_files(output_path, pdf_name)
+    # todo 修改此处local文件生成接口
+    url = MULTI_MODEL_SERVER["host_port"] + "/local_md"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            with open(zip_filepath, 'rb') as file:
+                form_data = aiohttp.FormData()
+                form_data.add_field('file', file, filename=pdf_name, content_type='application/pdf')
+                form_data.add_field('callback_url', callback_url)
+                form_data.add_field('callback_body_template', json.dumps(callback_body_template))
 
                 async with session.post(url, data=form_data) as response:
                     if response.status == 200:

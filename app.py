@@ -32,7 +32,8 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, F
 from pydantic import BaseModel
 
 from client.minio_client import MinioClient
-from configs.config import BASEDIR, MULTI_MODEL_SERVER, FILE_SERVER
+from configs.config import BASEDIR, MULTI_MODEL_SERVER, FILE_SERVER, PURE_ANALYSIS_SERVER
+from fast_analysis_script import call_multi_model_4local, extract_text_and_images, call_multi_model_2md
 from get_image_md5 import img_replace_into_md5
 from logger import code_log
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
@@ -71,7 +72,12 @@ async def process_queue():
         async with lock:
             if task_queue:
                 task = task_queue.popleft()
-                await process_files_background(task['file_list_obj'], task['pdf_content'])
+                if task.get("pdf2md", ""):
+                    await process_pdf2md_background(task['callback_url'], task['pdf_content'],
+                                                    task['filename'],
+                                                    task['task_id'])
+                else:
+                    await process_files_background(task['file_list_obj'], task['pdf_content'])
         await asyncio.sleep(1)  # 控制任务处理频率
 
 
@@ -82,35 +88,31 @@ async def startup_event():
     asyncio.create_task(process_queue())
 
 
-# @app.post("/pre_process_pdf", response_model=ResponseModel)
-# async def analysis(
-#         background_tasks: BackgroundTasks,
-#         file: UploadFile = File(...),
-#         file_list: str = Form(...)
-# ):
-#     file_list_data = eval(file_list)
-#     file_list_data.update({"strategy": file_list_data.get("strategy", "fast")})
-#     file_list_obj = FileList(**file_list_data)
-#
-#     if not validate_token(file_list_obj.token):
-#         raise HTTPException(status_code=401, detail="Invalid token")
-#
-#     initial_response = ResponseModel(
-#         code=200,
-#         msg="success",
-#         data={
-#             "file_list": [{"status": "已接受文件，正在处理中........"}],
-#             "token": file_list_obj.token
-#         }
-#     )
-#
-#     pdf_content = await file.read()
-#     print(f"received: {file_list_obj.file_list[0].target_path}")
-#
-#     # async with lock:
-#     task_queue.append({'file_list_obj': file_list_obj, 'pdf_content': pdf_content})
-#
-#     return initial_response
+@app.post("/process_pdf2md", response_model=ResponseModel)
+async def process_data2md(
+        task_id: str = Form(...),
+        file: UploadFile = File(...)
+):
+    # 处理文件为FileList 格式
+    try:
+        initial_response = ResponseModel(
+            code=200,
+            msg="success",
+            data={
+                "task_id": task_id
+            }
+        )
+
+        pdf_content = await file.read()
+        # 添加至任务队列
+        task_queue.append(
+            {'task_id': task_id, 'callback_url': PURE_ANALYSIS_SERVER["host_port"], 'filename': file.filename,
+             'pdf_content': pdf_content, 'pdf2md': True})
+        return initial_response
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON in file_list")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/pre_process_pdf", response_model=ResponseModel)
 async def analysis(
@@ -241,7 +243,7 @@ async def post_pdf_parse_main(file_info, pdf_path, token, file_server):
 
 def get_real_file_server(callback_url: str) -> str:
     code_log.info("file_server: %s" % callback_url)
-    if "show" or "10.204.118.33" in callback_url:
+    if "show" in callback_url or "10.204.118.33" in callback_url:
         code_log.info(f"FILE_SERVER: {FILE_SERVER} \ncurrent url map: produce -> {FILE_SERVER['produce']}")
         return FILE_SERVER["produce"]
     code_log.info(f"FILE_SERVER: {FILE_SERVER} \ncurrent url map: develop -> {FILE_SERVER['develop']}")
@@ -309,6 +311,57 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             # call multi_model
             else:
                 await call_multi_model(file_list, pdf_path)
+
+async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filename: str,
+                                    task_id: str):
+    msg = ""
+    md_path = ""
+    status = 200
+    callback_body_template = {
+        "id": task_id,
+        "status": status,
+        "fileType": "markdown",
+        "procDesc": msg
+    }
+    # pdf 文件处理
+    file_dir = os.path.join(BASEDIR, "data")
+    if not os.path.exists(file_dir):
+        os.makedirs(file_dir)
+    file_name = filename
+    pdf_path = os.path.join(file_dir, file_name)
+    with open(pdf_path, "wb") as f:
+        f.write(pdf_content)
+    # pdf 检查解析结果有无图片
+    try:
+        is_suc = extract_text_and_images(pdf_path)
+        if not is_suc:
+            await model_service.handle_reload()
+            raise Exception("模型解析失败,尝试重启模型,队列回填")
+        pdf_name = os.path.basename(pdf_path).split(".")[0]
+        pdf_path_parent = os.path.dirname(pdf_path)
+        output_path = os.path.join(pdf_path_parent, pdf_name)
+        output_image_path = os.path.join(output_path, 'images')
+        output_md_path = os.path.join(output_path, f"{pdf_name}.md")
+        md_path = os.path.join(file_dir, f"{pdf_name}.md")
+        if not os.path.exists(output_image_path):
+            # with open(output_md_path, "r", encoding="utf-8") as f:
+            #     result = f.read()
+            # with open(md_path, "w") as f:
+            #     f.write(result)
+            print(f"images不包含图片")
+            # 直接回调 发送md文件
+            await sendfile_callback(output_md_path, callback_url, callback_body_template)
+        else:
+            # 通过多模态回调
+            await call_multi_model_2md(pdf_path, callback_url, callback_body_template)
+    except Exception as e:
+        print(f"Error in process_pdf: {str(e)}")
+        task_queue.append(
+            {'task_id': task_id, 'callback_url': PURE_ANALYSIS_SERVER["host_port"], 'filename': file_name,
+             'pdf_content': pdf_content, 'pdf2md': True})
+        msg = str(e)
+        callback_body_template['procDesc'] = msg
+        await sendfile_callback(md_path, callback_url, callback_body_template)
 
 
 def compress_files(output_path: str, file_name: str) -> str:
@@ -389,6 +442,31 @@ async def send_callback(data: dict) -> None:
         except Exception as e:
             print(f"Error sending callback: {str(e)}")
 
+
+async def sendfile_callback(file_path: str, callback_url: str, callback_body: dict) -> None:
+    # 读取 .md 文件内容
+    try:
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+    except Exception as e:
+        print(f"Error reading file: {str(e)}")
+        return
+
+    # 创建一个 aiohttp.ClientSession 实例
+    async with aiohttp.ClientSession() as session:
+        try:
+            # 创建 FormData
+            form_data = aiohttp.FormData()
+            form_data.add_field('file', file_data, filename=file_path, content_type='text/markdown')
+
+            # 发送 POST 请求，将文件和 callback_body 一起发送
+            async with session.post(callback_url, data=form_data, json=callback_body) as response:
+                if response.status == 200:
+                    print("Callback sent successfully")
+                else:
+                    print(f"Failed to send callback. Status: {response.status}")
+        except Exception as e:
+            print(f"Error sending callback: {str(e)}")
 
 def validate_token(token: str) -> bool:
     # 这里应该实现实际的token验证逻辑

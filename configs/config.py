@@ -4,19 +4,18 @@ import os
 
 BASEDIR = os.path.dirname(os.path.abspath(os.path.dirname(__file__)))  # 项目目录
 
-# MULTI_MODEL_SERVER = {
-#     "host_port": "http://localhost:8001"
-# }
 MULTI_MODEL_SERVER = {
     "host_port": "http://fs-doc-analysis:8000"
 }
-# langchain接口回调地址 不再静态维护
-# CALLBACK_URL = "http://langchain.wsb360.com:7861/api/v2/analysis_callback"
-# ORACLE_CALLBACK_URL = "http://langchain.wsb360.com:8861/api/v2/analysis_callback"
 # todo file_server 需要区分生产环境和开发环境 map映射匹配
 FILE_SERVER = {
     "develop": "http://develop.wsb360.com:18889/ai-api",
     "produce": "http://show.wsb360.com:18889/ai-api"
+}
+
+# todo
+PURE_ANALYSIS_SERVER = {
+    "host_port": "http://localhost:8001"
 }
 try:
     from local_config import CALLBACK_URL, MULTI_MODEL_SERVER, FILE_SERVER
