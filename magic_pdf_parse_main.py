@@ -4,11 +4,12 @@ import os
 
 from loguru import logger
 
-from magic_pdf.data.data_reader_writer import FileBasedDataWriter
+from magic_pdf.config.enums import SupportedPdfParseMethod
+from magic_pdf.data.data_reader_writer import FileBasedDataWriter, FileBasedDataReader
+from magic_pdf.data.dataset import PymuDocDataset
 from magic_pdf.libs.draw_bbox import draw_layout_bbox, draw_span_bbox
-from magic_pdf.pipe.OCRPipe import OCRPipe
-from magic_pdf.pipe.TXTPipe import TXTPipe
-from magic_pdf.pipe.UNIPipe import UNIPipe
+from magic_pdf.model.doc_analyze_by_custom_model import doc_analyze
+
 
 # todo: 设备类型选择 （？）
 
@@ -99,47 +100,57 @@ def pdf_parse_main(
         else:
             model_json = []
 
+        name_without_suff = pdf_name
         # 执行解析步骤
         image_writer, md_writer = FileBasedDataWriter(output_image_path), FileBasedDataWriter(output_path)
 
-        # 选择解析方式
-        if parse_method == 'auto':
-            jso_useful_key = {'_pdf_type': '', 'model_list': model_json}
-            pipe = UNIPipe(pdf_bytes, jso_useful_key, image_writer)
-        elif parse_method == 'txt':
-            pipe = TXTPipe(pdf_bytes, model_json, image_writer)
-        elif parse_method == 'ocr':
-            pipe = OCRPipe(pdf_bytes, model_json, image_writer)
+        # proc
+        ## Create Dataset Instance
+        ds = PymuDocDataset(pdf_bytes)
+
+        ## inference
+        if ds.classify() == SupportedPdfParseMethod.OCR:
+            infer_result = ds.apply(doc_analyze, ocr=True)
+
+            ## pipeline
+            pipe_result = infer_result.pipe_ocr_mode(image_writer)
+
         else:
-            logger.error('unknown parse method, only auto, ocr, txt allowed')
-            raise ValueError('Unknown parse method, only auto, ocr, txt allowed')
+            infer_result = ds.apply(doc_analyze, ocr=False)
 
-        # 执行分类
-        pipe.pipe_classify()
+            ## pipeline
+            pipe_result = infer_result.pipe_txt_mode(image_writer)
 
-        # 如果没有传入模型数据，则使用内置模型解析
-        if len(model_json) == 0:
-            pipe.pipe_analyze()  # 解析
-            orig_model_list = copy.deepcopy(pipe.model_list)
+        ### draw model result on each page
+        infer_result.draw_model(os.path.join(output_path, f"{name_without_suff}_model.pdf"))
 
-        # 执行解析
-        pipe.pipe_parse()
+        ### get model inference result
+        model_inference_result = infer_result.get_infer_res()
 
-        # 保存 text 和 md 格式的结果
-        content_list = pipe.pipe_mk_uni_format(image_path_parent, drop_mode='none')
-        md_content = pipe.pipe_mk_markdown(image_path_parent, drop_mode='none')
-        # md_content = pipe.pipe_mk_markdown(image_path_parent, drop_mode='none', md_make_mode="nlp_markdown")
+        ### draw layout result on each page
+        pipe_result.draw_layout(os.path.join(output_path, f"{name_without_suff}_layout.pdf"))
 
-        if is_json_md_dump:
-            json_md_dump(pipe, md_writer, pdf_name, content_list, md_content, orig_model_list)
+        ### draw spans result on each page
+        pipe_result.draw_span(os.path.join(output_path, f"{name_without_suff}_spans.pdf"))
 
-        pdf_info = pipe.pdf_mid_data.get('pdf_info')
-        if pdf_info:
-            draw_visualization_bbox(pdf_info, pdf_bytes, output_path, pdf_name)
-        else:
-            logger.warning("pdf_info is missing, skipping visualization")
-        # if is_draw_visualization_bbox:
-        #     draw_visualization_bbox(pipe.pdf_mid_data['pdf_info'], pdf_bytes, output_path, pdf_name)
+        ### get markdown content
+        md_content = pipe_result.get_markdown(output_image_path)
+
+        ### dump markdown
+        pipe_result.dump_md(md_writer, f"{name_without_suff}.md", output_image_path)
+
+        ### get content list content
+        content_list_content = pipe_result.get_content_list(output_image_path)
+
+        ### dump content list
+        pipe_result.dump_content_list(md_writer, f"{name_without_suff}_content_list.json", output_image_path)
+
+        ### get middle json
+        middle_json_content = pipe_result.get_middle_json()
+
+        ### dump middle json
+        pipe_result.dump_middle_json(md_writer, f'{name_without_suff}_middle.json')
+
         return True
 
     except Exception as e:
@@ -150,5 +161,5 @@ def pdf_parse_main(
 # 测试
 if __name__ == '__main__':
     # pdf_path = r"/Users/wuguanlin/wgl/langchain-chatchat/cut_采矿工程设计手册（上册）.pdf"
-    pdf_path = r"/Users/wuguanlin/cut_采矿工程设计手册（上册）new.pdf"
+    pdf_path = r"/Users/wuguanlin/wgl/MinerU/demo/first_page1.pdf"
     pdf_parse_main(pdf_path)
