@@ -137,13 +137,13 @@ def pdf_parse_main(
         md_content = pipe_result.get_markdown(output_image_path)
 
         ### dump markdown
-        pipe_result.dump_md(md_writer, f"{name_without_suff}.md", output_image_path)
+        pipe_result.dump_md(md_writer, f"{name_without_suff}.md", image_path_parent)
 
         ### get content list content
-        content_list_content = pipe_result.get_content_list(output_image_path)
+        content_list_content = pipe_result.get_content_list(image_path_parent)
 
         ### dump content list
-        pipe_result.dump_content_list(md_writer, f"{name_without_suff}_content_list.json", output_image_path)
+        pipe_result.dump_content_list(md_writer, f"{name_without_suff}_content_list.json", image_path_parent)
 
         ### get middle json
         middle_json_content = pipe_result.get_middle_json()
