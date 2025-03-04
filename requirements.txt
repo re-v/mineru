@@ -1,12 +1,13 @@
 rapidocr_onnxruntime
-rapid_table
+rapid_table==1.0.3
+openai
 concurrent-log-handler
 requests>=2.32.2
 tqdm>=4.66.3
 doclayout_yolo
 rapidocr_paddle
 # Tips: aarch 架构需单独安装unimernet
-unimernet
+unimernet=0.2.3
 boto3>=1.28.43
 Brotli>=1.1.0
 click>=8.1.7
