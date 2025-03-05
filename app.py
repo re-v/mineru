@@ -265,6 +265,9 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             # 同步阻塞开销线程执行
             # is_suc = False
             is_suc = await asyncio.to_thread(pdf_parse_main, pdf_path)
+            # debug
+            # if file_list.strategy == "test":
+            #     is_suc = False
             if not is_suc:
                 await model_service.handle_reload()
                 raise Exception("模型解析失败,尝试重启模型,队列回填")
@@ -290,6 +293,7 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             "token": file_list.token
         }
         print(f"错误回调参数:{error_params}")
+        # todo 移除回填
         task_queue.append({'file_list_obj': file_list, 'pdf_content': pdf_content})
         callback_data = {
             "code": 500,

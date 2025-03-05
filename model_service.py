@@ -11,6 +11,7 @@ import asyncio
 import gc
 import signal
 import torch
+from magic_pdf.model.sub_modules.model_init import AtomModelSingleton
 
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
 
@@ -26,16 +27,24 @@ class ModelService:
     def load_model(self):
         """加载或重新加载模型"""
         print("🟢 加载模型...")
-        if self.model_manager:
-            # del self.model_manager  # 删除旧模型
-            self.clean_memory()
-            # gc.collect()
-            # torch.cuda.empty_cache()  # 释放显存
-            # torch.cuda.synchronize()
-            self.model_manager.reload_model(False, False)
-        else:
+        atom_model_manager = AtomModelSingleton()
+        try:
+            if self.model_manager:
+                # del self.model_manager  # 删除旧模型
+                atom_model_manager._instance = None
+                atom_model_manager._models = {}
+                self.clean_memory()
+                self.model_manager.reload_model(False, False)
+            else:
+                self.model_manager = ModelSingleton()
+                self.custom_model = self.model_manager.get_model(False, False)
+        except Exception:
+            del self.model_manager
+            del self.custom_model
+            atom_model_manager._instance = None
+            atom_model_manager._models = {}
             self.model_manager = ModelSingleton()
-            self.custom_model = self.model_manager.get_model(False, False)
+            self.custom_model = self.model_manager.reload_model(False, False)
         print("✅ 模型加载完成！")
 
     async def listen_for_reload(self):
@@ -54,5 +63,6 @@ class ModelService:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
+            torch.cuda.synchronize()
         gc.collect()
 
