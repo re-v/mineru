@@ -1,0 +1,30 @@
+version: "3.6"
+
+services:
+  mineru:
+    image: mineru:v0.0.1
+    container_name: mineru
+    networks:
+      flyshare:
+        ipv4_address: 192.19.0.22
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+      - DOCKER=True
+    ports:
+      - 8002:8000
+    volumes:
+      - /public/hw0s16801/models/PDF-Extract-Kit-1___0/models:/tmp/models
+      - /public/hw0s16801/models/layoutreader:/tmp/layoutreader
+      - /public/hw0s16801/models/paddleocr:/root/.paddleocr
+      - /public/hw0s16801/MinerU_bak:/work/MinerU
+      - /public/hw0s16801/MinerU_bak/magic-pdf.template.json:/root/magic-pdf.json
+networks:
+  flyshare:
+    name: flyshare
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.19.0.0/24
