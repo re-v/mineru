@@ -13,10 +13,7 @@ FILE_SERVER = {
     "produce": "http://show.wsb360.com:18889/ai-api"
 }
 
-# todo
-PURE_ANALYSIS_SERVER = {
-    "host_port": "http://develop.wsb360.com:18889/ai-api/ai/governance/process/callback"
-}
+
 try:
     from local_config import CALLBACK_URL, MULTI_MODEL_SERVER, FILE_SERVER
 except Exception as e:

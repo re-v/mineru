@@ -32,7 +32,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, F
 from pydantic import BaseModel
 
 from client.minio_client import MinioClient
-from configs.config import BASEDIR, MULTI_MODEL_SERVER, FILE_SERVER, PURE_ANALYSIS_SERVER
+from configs.config import BASEDIR, MULTI_MODEL_SERVER, FILE_SERVER
 from fast_analysis_script import call_multi_model_4local, extract_text_and_images, call_multi_model_2md
 from get_image_md5 import img_replace_into_md5
 from logger import code_log
@@ -91,7 +91,8 @@ async def startup_event():
 @app.post("/process_pdf2md", response_model=ResponseModel)
 async def process_data2md(
         task_id: str = Form(...),
-        file: UploadFile = File(...)
+        file: UploadFile = File(...),
+        callback_url: str = Form(...)   # 回调接口
 ):
     # 处理文件为FileList 格式
     try:
@@ -106,7 +107,7 @@ async def process_data2md(
         pdf_content = await file.read()
         # 添加至任务队列
         task_queue.append(
-            {'task_id': task_id, 'callback_url': PURE_ANALYSIS_SERVER["host_port"], 'filename': file.filename,
+            {'task_id': task_id, 'callback_url': callback_url, 'filename': file.filename,
              'pdf_content': pdf_content, 'pdf2md': True})
         return initial_response
     except json.JSONDecodeError:
@@ -361,7 +362,7 @@ async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filen
     except Exception as e:
         print(f"Error in process_pdf: {str(e)}")
         task_queue.append(
-            {'task_id': task_id, 'callback_url': PURE_ANALYSIS_SERVER["host_port"], 'filename': file_name,
+            {'task_id': task_id, 'callback_url': callback_url, 'filename': file_name,
              'pdf_content': pdf_content, 'pdf2md': True})
         msg = str(e)
         callback_body_template['procDesc'] = msg
