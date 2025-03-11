@@ -324,7 +324,7 @@ async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filen
     callback_body_template = {
         "id": task_id,
         "status": status,
-        "fileType": "markdown",
+        "fileType": 2,
         "procDesc": msg
     }
     # pdf 文件处理
@@ -450,6 +450,9 @@ async def send_callback(data: dict) -> None:
 async def sendfile_callback(file_path: str, callback_url: str, callback_body: dict) -> None:
     # 读取 .md 文件内容
     try:
+        if not os.path.exists(file_path):
+            with open(file_path, "w") as f:
+                f.write("")
         with open(file_path, 'rb') as f:
             file_data = f.read()
     except Exception as e:

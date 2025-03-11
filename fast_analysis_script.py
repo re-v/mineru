@@ -86,7 +86,7 @@ async def call_multi_model_2md(pdf_path: str, callback_url: str, callback_body_t
     # 压缩output_path 路径下的md文件,images图片包 stream传输
     zip_filepath = compress_files(output_path, pdf_name)
     # todo 修改此处local文件生成接口
-    url = MULTI_MODEL_SERVER["host_port"] + "/local_md"
+    url = MULTI_MODEL_SERVER["host_port"] + "/local_md_new"
 
     try:
         async with aiohttp.ClientSession() as session:

@@ -15,7 +15,7 @@ FILE_SERVER = {
 
 # todo
 PURE_ANALYSIS_SERVER = {
-    "host_port": "http://localhost:8001"
+    "host_port": "http://develop.wsb360.com:18889/ai-api/ai/governance/process/callback"
 }
 try:
     from local_config import CALLBACK_URL, MULTI_MODEL_SERVER, FILE_SERVER
