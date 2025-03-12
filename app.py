@@ -358,6 +358,7 @@ async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filen
             await sendfile_callback(output_md_path, callback_url, callback_body_template)
         else:
             # 通过多模态回调
+            # await sendfile_callback(output_md_path, callback_url, callback_body_template)
             await call_multi_model_2md(pdf_path, callback_url, callback_body_template)
     except Exception as e:
         print(f"Error in process_pdf: {str(e)}")
@@ -466,15 +467,18 @@ async def sendfile_callback(file_path: str, callback_url: str, callback_body: di
             # 创建 FormData
             form_data = aiohttp.FormData()
             form_data.add_field('file', file_data, filename=file_path, content_type='text/markdown')
-
+            form_data.add_field("id", callback_body["id"])
+            form_data.add_field("status", str(callback_body["status"]))
+            form_data.add_field("fileType", str(callback_body["fileType"]))
+            form_data.add_field("procDesc", callback_body["procDesc"])
             # 发送 POST 请求，将文件和 callback_body 一起发送
-            async with session.post(callback_url, data=form_data, json=callback_body) as response:
+            async with session.post(callback_url, data=form_data) as response:
                 if response.status == 200:
-                    print("Callback sent successfully")
+                    logging.info("Callback sent successfully")
                 else:
-                    print(f"Failed to send callback. Status: {response.status}")
+                    logging.info(f"Failed to send callback. Status: {response.status}")
         except Exception as e:
-            print(f"Error sending callback: {str(e)}")
+            logging.info(f"Error sending callback: {str(e)}")
 
 def validate_token(token: str) -> bool:
     # 这里应该实现实际的token验证逻辑
