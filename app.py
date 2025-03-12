@@ -355,9 +355,11 @@ async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filen
             #     f.write(result)
             print(f"images不包含图片")
             # 直接回调 发送md文件
+            print(f"回调入参:{output_md_path, callback_url, callback_body_template}")
             await sendfile_callback(output_md_path, callback_url, callback_body_template)
         else:
             # 通过多模态回调
+            print(f"call_multi_model_2md 回调入参:{output_md_path, callback_url, callback_body_template}")
             # await sendfile_callback(output_md_path, callback_url, callback_body_template)
             await call_multi_model_2md(pdf_path, callback_url, callback_body_template)
     except Exception as e:
@@ -367,6 +369,7 @@ async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filen
              'pdf_content': pdf_content, 'pdf2md': True})
         msg = str(e)
         callback_body_template['procDesc'] = msg
+        print(f"回调入参:{md_path, callback_url, callback_body_template}")
         await sendfile_callback(md_path, callback_url, callback_body_template)
 
 
