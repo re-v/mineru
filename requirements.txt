@@ -1,3 +1,4 @@
+# base req -> ./docker/global/requirements.txt
 rapidocr_onnxruntime
 rapid_table==1.0.3
 openai
@@ -7,7 +8,7 @@ tqdm>=4.66.3
 doclayout_yolo
 rapidocr_paddle
 # Tips: aarch 架构需单独安装unimernet
-unimernet=0.2.3
+unimernet==0.2.3
 boto3>=1.28.43
 Brotli>=1.1.0
 click>=8.1.7
