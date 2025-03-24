@@ -22,3 +22,4 @@ services:
       - 8000:8000
     volumes:
       - /home/wgl/mineru:/work/MinerU
+      - ./magic-pdf.json:/root/magic-pdf.json
