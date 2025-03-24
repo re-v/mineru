@@ -33,7 +33,8 @@ from pydantic import BaseModel
 
 from client.minio_client import MinioClient
 from configs.config import BASEDIR, MULTI_MODEL_SERVER, FILE_SERVER
-from fast_analysis_script import call_multi_model_4local, extract_text_and_images, call_multi_model_2md
+from fast_analysis_script import call_multi_model_4local, extract_text_and_images, call_multi_model_2md, \
+    call_multi_model_by_api
 from get_image_md5 import img_replace_into_md5
 from logger import code_log
 from magic_pdf.model.doc_analyze_by_custom_model import ModelSingleton
@@ -72,6 +73,11 @@ async def process_queue():
         async with lock:
             if task_queue:
                 task = task_queue.popleft()
+                if task.get("analysis_type", "") == "api":
+                    await process_pdf2md_background_by_api(task['callback_url'], task['pdf_content'],
+                                                           task['filename'],
+                                                           task['task_id'])
+                    continue
                 if task.get("pdf2md", ""):
                     await process_pdf2md_background(task['callback_url'], task['pdf_content'],
                                                     task['filename'],
@@ -87,6 +93,34 @@ async def startup_event():
     # 在应用启动时，启动任务处理队列的协程
     asyncio.create_task(process_queue())
 
+
+@app.post("/process_pdf2md_by_api", response_model=ResponseModel)
+async def process_pdf2md_by_api(
+        task_id: str = Form(...),
+        file: UploadFile = File(...),
+        callback_url: str = Form(...)   # 回调接口
+):
+    # mineru处理前置任务 通过api调用多模态服务 异步返回处理结果
+    # 处理文件为FileList 格式
+    try:
+        initial_response = ResponseModel(
+            code=200,
+            msg="success",
+            data={
+                "task_id": task_id
+            }
+        )
+
+        pdf_content = await file.read()
+        # 添加至任务队列
+        task_queue.append(
+            {'task_id': task_id, 'callback_url': callback_url, 'filename': file.filename,
+             'pdf_content': pdf_content, 'analysis_type': 'api'})
+        return initial_response
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON in file_list")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/process_pdf2md", response_model=ResponseModel)
 async def process_data2md(
@@ -316,6 +350,57 @@ async def process_files_background(file_list: FileList, pdf_content: bytes):
             # call multi_model
             else:
                 await call_multi_model(file_list, pdf_path)
+
+async def process_pdf2md_background_by_api(callback_url: str, pdf_content: bytes, filename: str,
+                                    task_id: str):
+    msg = ""
+    md_path = ""
+    status = 200
+    callback_body_template = {
+        "id": task_id,
+        "status": status,
+        "fileType": 2,
+        "procDesc": msg
+    }
+    # pdf 文件处理
+    file_dir = os.path.join(BASEDIR, "data")
+    if not os.path.exists(file_dir):
+        os.makedirs(file_dir)
+    file_name = filename
+    pdf_path = os.path.join(file_dir, file_name)
+    with open(pdf_path, "wb") as f:
+        f.write(pdf_content)
+    # pdf 检查解析结果有无图片
+    try:
+        is_suc = extract_text_and_images(pdf_path)
+        if not is_suc:
+            await model_service.handle_reload()
+            raise Exception("模型解析失败,尝试重启模型,队列回填")
+        pdf_name = os.path.basename(pdf_path).split(".")[0]
+        pdf_path_parent = os.path.dirname(pdf_path)
+        output_path = os.path.join(pdf_path_parent, pdf_name)
+        output_image_path = os.path.join(output_path, 'images')
+        output_md_path = os.path.join(output_path, f"{pdf_name}.md")
+        md_path = os.path.join(file_dir, f"{pdf_name}.md")
+        if not os.path.exists(output_image_path):
+            print(f"images不包含图片")
+            # 直接回调 发送md文件
+            print(f"回调入参:{output_md_path, callback_url, callback_body_template}")
+            await sendfile_callback(output_md_path, callback_url, callback_body_template)
+        else:
+            # 通过多模态api回调
+            print(f"多模态api回调入参:{output_md_path, callback_url, callback_body_template}")
+            await call_multi_model_by_api(pdf_path, callback_url, callback_body_template)
+    except Exception as e:
+        print(f"Error in process_pdf: {str(e)}")
+        task_queue.append(
+            {'task_id': task_id, 'callback_url': callback_url, 'filename': file_name,
+             'pdf_content': pdf_content, 'analysis_type': 'api'})
+        msg = str(e)
+        callback_body_template['procDesc'] = msg
+        print(f"回调入参:{md_path, callback_url, callback_body_template}")
+        await sendfile_callback(md_path, callback_url, callback_body_template)
+
 
 async def process_pdf2md_background(callback_url: str, pdf_content: bytes, filename: str,
                                     task_id: str):

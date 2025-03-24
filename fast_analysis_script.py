@@ -16,6 +16,7 @@ import tarfile
 import aiohttp
 
 from configs.config import MULTI_MODEL_SERVER, BASEDIR
+from image_desc import process_tar_background4local_new
 
 """
 直接执行命令 传入文件夹 例如 python fast_analysis_script --folder input_path --target output_path
@@ -76,6 +77,19 @@ async def call_multi_model_4local(pdf_path: str):
                         logging.error(f"请求失败，状态码: {response.status}")
     except Exception as e:
         logging.error(f"请求过程中出错: {str(e)}")
+
+
+async def call_multi_model_by_api(pdf_path: str, callback_url: str, callback_body_template: dict):
+    pdf_name = os.path.basename(pdf_path).split(".")[0]
+    pdf_path_parent = os.path.dirname(pdf_path)
+
+    output_path = os.path.join(pdf_path_parent, pdf_name)
+
+    # 压缩output_path 路径下的md文件,images图片包 stream传输
+    zip_filepath = compress_files(output_path, pdf_name)
+
+    await process_tar_background4local_new(zip_filepath, callback_url, callback_body_template)
+
 
 async def call_multi_model_2md(pdf_path: str, callback_url: str, callback_body_template: dict):
     pdf_name = os.path.basename(pdf_path).split(".")[0]
