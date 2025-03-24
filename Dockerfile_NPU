@@ -59,4 +59,4 @@ RUN /bin/bash -c "source /opt/mineru_venv/bin/activate && pip3 install -r requir
 
 EXPOSE 8000
 # 设置启动命令
-CMD ["source /opt/mineru_venv/bin/activate && uvicorn app:app --host 0.0.0.0 --port 8000"]
+ENTRYPOINT ["/bin/bash", "-c", "source /opt/mineru_venv/bin/activate && uvicorn app:app --host 0.0.0.0 --port 8000"]

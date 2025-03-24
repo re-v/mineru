@@ -47,4 +47,11 @@ RUN /bin/bash -c "pip3 install modelscope && \
     sed -i 's|cpu|cuda|g' /root/magic-pdf.json"
 
 # Set the entry point to activate the virtual environment and run the command line tool
-ENTRYPOINT ["/bin/bash", "-c", "source /opt/mineru_venv/bin/activate && exec \"$@\"", "--"]
+WORKDIR /work/MinerU
+COPY ./requirements.txt .
+# 安装python依赖
+RUN /bin/bash -c "source /opt/mineru_venv/bin/activate && pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple"
+
+EXPOSE 8000
+# 设置启动命令
+ENTRYPOINT ["/bin/bash", "-c", "source /opt/mineru_venv/bin/activate && uvicorn app:app --host 0.0.0.0 --port 8000"]
