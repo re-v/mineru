@@ -52,5 +52,10 @@ RUN /bin/bash -c "source /opt/mineru_venv/bin/activate && \
     python3 download_models.py && \
     sed -i 's|cpu|npu|g' /root/magic-pdf.json"
 
+WORKDIR /work/MinerU
+COPY ./requirements.txt .
+# 安装python依赖 适配nividia显卡 H系列和50系列
+RUN /bin/bash -c "source /opt/mineru_venv/bin/activate && \
+    pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple"
 # Set the entry point to activate the virtual environment and run the command line tool
 ENTRYPOINT ["/bin/bash", "-c", "source /opt/mineru_venv/bin/activate && exec \"$@\"", "--"]
