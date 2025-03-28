@@ -2,7 +2,7 @@ version: "3.6"
 
 services:
   mineru:
-    image: mineru:v0.10.6
+    image: mineru:v1.2.0
     container_name: mineru
     networks:
       flyshare:
@@ -21,14 +21,15 @@ services:
       - PYTHONUNBUFFERED=1
       - DOCKER=True
       - CUDA_VISIBLE_DEVICES=1
+      - VIRTUAL_VRAM_SIZE=12 # 与其他计算单元共享显卡资源时配置, 计划分配给mineru服务的显存
     ports:
       - 8002:8000
     volumes:
       - /gpu1_data/models/PDF-Extract-Kit-1___0/models:/tmp/models
       - /gpu1_data/models/layoutreader:/tmp/layoutreader
       - /gpu1_data/paddleocr:/root/.paddleocr
-      - /home/gpu1/mineru:/work/MinerU
-      - /home/gpu1/mineru/magic-pdf.template.json:/root/magic-pdf.json
+      - /home/gpu1/mineru_bak:/work/MinerU
+      - /home/gpu1/mineru_bak/magic-pdf.template.json:/root/magic-pdf.json
 networks:
   flyshare:
     name: flyshare
