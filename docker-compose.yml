@@ -29,6 +29,7 @@ services:
       - /gpu1_data/paddleocr:/root/.paddleocr
       - /home/gpu1/mineru:/work/MinerU
       - /home/gpu1/mineru/magic-pdf.template.json:/root/magic-pdf.json
+    entrypoint: ["/bin/bash", "-c", "source /opt/mineru_venv/bin/activate && python3 app.py"]
 networks:
   flyshare:
     name: flyshare

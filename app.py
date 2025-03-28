@@ -44,7 +44,7 @@ from multiprocessing import Process, Manager, Lock, Event
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 app = FastAPI()
 
-# task_queue = deque()  # 启用任务型异步队列
+task_queue = deque()  # 启用任务型异步队列
 lock = asyncio.Lock()  # 启用异步队列锁
 
 
@@ -75,7 +75,7 @@ def sync_process_queue(stop_event, input_queue):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         task_queue = input_queue.get()
-        print(task_queue)
+        print({k: v for k, v in task_queue.items() if k != "pdf_content"})
         input_queue.put(task_queue)
         loop.run_until_complete(process_queue(stop_event, input_queue))
     except Exception as e:
@@ -118,12 +118,11 @@ async def startup_event():
     # asyncio.create_task(process_queue())
 
 
-
 @app.post("/process_pdf2md", response_model=ResponseModel)
 async def process_data2md(
         task_id: str = Form(...),
         file: UploadFile = File(...),
-        callback_url: str = Form(...)   # 回调接口
+        callback_url: str = Form(...)  # 回调接口
 ):
     # 处理文件为FileList 格式
     try:
@@ -145,6 +144,7 @@ async def process_data2md(
         raise HTTPException(status_code=400, detail="Invalid JSON in file_list")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.post("/pre_process_pdf", response_model=ResponseModel)
 async def analysis(
@@ -293,7 +293,7 @@ def check_and_reload(stop_event, msg_queue, is_suc):
         raise Exception("模型解析失败,尝试重启模型,队列回填")
 
 
-async def process_files_background(stop_event, msg_queue, file_list: FileList, pdf_content: bytes):
+async def process_files_background(stop_event, input_queue, file_list: FileList, pdf_content: bytes):
     file_server = get_real_file_server(file_list.callback_url)
     callback_data = dict()
     exist_images = False
@@ -310,7 +310,7 @@ async def process_files_background(stop_event, msg_queue, file_list: FileList, p
             # debug
             if file_list.strategy == "test":
                 is_suc = False
-            check_and_reload(stop_event, msg_queue, is_suc)
+            check_and_reload(stop_event, input_queue, is_suc)
             # await asyncio.to_thread(time.sleep, 3)
             print(f"finish process: {file_info.target_path}")
             processed_file, exist_images = await post_pdf_parse_main(file_info, pdf_path, file_list.token, file_server)
@@ -355,7 +355,8 @@ async def process_files_background(stop_event, msg_queue, file_list: FileList, p
             else:
                 await call_multi_model(file_list, pdf_path)
 
-async def process_pdf2md_background(stop_event, msg_queue, callback_url: str, pdf_content: bytes, filename: str,
+
+async def process_pdf2md_background(stop_event, input_queue, callback_url: str, pdf_content: bytes, filename: str,
                                     task_id: str):
     msg = ""
     md_path = ""
@@ -363,7 +364,7 @@ async def process_pdf2md_background(stop_event, msg_queue, callback_url: str, pd
     callback_body_template = {
         "id": task_id,
         "status": status,
-        "fileType": "markdown",
+        "fileType": 2,
         "procDesc": msg
     }
     # pdf 文件处理
@@ -375,7 +376,7 @@ async def process_pdf2md_background(stop_event, msg_queue, callback_url: str, pd
     with open(pdf_path, "wb") as f:
         f.write(pdf_content)
     is_suc = extract_text_and_images(pdf_path)
-    check_and_reload(stop_event, msg_queue, is_suc)
+    check_and_reload(stop_event, input_queue, is_suc)
     # pdf 检查解析结果有无图片
     try:
         pdf_name = os.path.basename(pdf_path).split(".")[0]
@@ -511,6 +512,7 @@ async def sendfile_callback(file_path: str, callback_url: str, callback_body: di
                     logging.info(f"Failed to send callback. Status: {response.status}")
         except Exception as e:
             logging.info(f"Error sending callback: {str(e)}")
+
 
 def validate_token(token: str) -> bool:
     # 这里应该实现实际的token验证逻辑
